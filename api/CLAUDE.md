@@ -37,6 +37,18 @@ See `docs/aspnet-conventions.md` for code organization. Beyond that:
   to be read during development.
 - Code and comments in English.
 
+## Deployment
+
+- DB connection string key is `ConnectionStrings:Postgres` —
+  `appsettings.Development.json` for local dev, `ConnectionStrings__Postgres`
+  env var in Docker Compose/Production (no `appsettings.Production.json`).
+  See root `README.md` for the full run/deploy process.
+- `Features/Health/` is a live example of the vertical-slice convention
+  (`docs/aspnet-conventions.md`) — pattern-match new features against it.
+- `api/.dockerignore` must keep excluding `bin/`/`obj/` — otherwise a local
+  build's artifacts get copied into the Docker image and clobber the
+  container's own `dotnet restore`.
+
 ## Off-limits without asking first
 
 `PeriodStartFor` and the streak SQL are written by the human, by hand (see

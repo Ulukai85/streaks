@@ -47,3 +47,19 @@ pull, override for that command only: `DOCKER_CONFIG=~/.docker docker pull ...`.
 disables Testcontainers' own cleanup container, so every crashed or
 Ctrl-C'd test run leaves an orphaned Postgres container running — it hides
 the symptom without fixing the auth problem underneath.
+
+## Compose Postgres is mapped to host port 5433, not 5432
+
+This dev machine runs a native `postgresql.service` on 5432, so
+`infrastructure/docker-compose.yml` maps Postgres to host `5433` instead
+(`appsettings.Development.json`'s connection string matches). Don't "fix"
+this back to 5432 without checking `5432` is actually free.
+
+## `postgres:18-alpine` container reports incompatible data / fails healthcheck
+
+**Cause:** the 18+ Postgres images expect a single volume mount at
+`/var/lib/postgresql` (not `/var/lib/postgresql/data` as in older images) —
+mounting the old path makes the entrypoint see "unused" data in the wrong
+layout and refuse to start. `infrastructure/docker-compose.yml` already
+mounts the volume at the correct path — if a future edit reverts this, the
+`postgres` service will come up unhealthy.

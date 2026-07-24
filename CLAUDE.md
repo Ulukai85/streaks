@@ -5,6 +5,9 @@ read it before doing anything non-trivial. This file just orients you.
 
 ## Where things live
 
+- `README.md` — how to run/deploy the stack (Docker Compose, local dev).
+- `infrastructure/` — `docker-compose.yml`, `Caddyfile`, `.env.example` for
+  the deployable stack (Postgres + api + Caddy).
 - `docs/domain.md` — the period/streak domain model, restated as prose. Read
   this before touching anything cadence- or streak-related.
 - `docs/decisions/` — ADRs. One is required before any new dependency.

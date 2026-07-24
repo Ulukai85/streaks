@@ -1,0 +1,51 @@
+# streaks
+
+A personal streak tracker (add a challenge, see today's dashboard, tick it
+off, see the streak). See `PROJECT-BRIEF.md` for full product/architecture
+intent; `CLAUDE.md` maps the rest of the docs.
+
+Stack: ASP.NET Core (.NET 10) + EF Core/PostgreSQL API in `api/`, Angular 22
+frontend in `web/`, Docker Compose + Caddy deployment config in
+`infrastructure/`.
+
+## Running the full stack (Docker Compose)
+
+```bash
+cd infrastructure
+cp .env.example .env   # adjust Postgres credentials if you want
+docker compose up --build -d
+```
+
+Three services come up on one Docker network:
+
+| Service    | Image                | Host port | Purpose                                |
+|------------|----------------------|-----------|-----------------------------------------|
+| `postgres` | `postgres:18-alpine` | `5433`    | Database (mapped off 5432 — see below) |
+| `api`      | built from `api/`    | —         | ASP.NET Core API, not exposed directly |
+| `caddy`    | `caddy:2-alpine`     | `8080`    | Reverse proxy to `api`                 |
+
+Verify it's up:
+
+```bash
+curl http://localhost:8080/api/health
+# {"status":"ok","databaseConnected":true}
+```
+
+Tear down with `docker compose down` (add `-v` to also drop the Postgres
+volume).
+
+## Local development (without full containerization)
+
+**Backend** — `cd api/src/Api && dotnet run`. Uses the connection string in
+`appsettings.Development.json`, which points at `localhost:5433` — so the
+compose Postgres must be running (`docker compose up -d postgres` is enough).
+
+**Frontend** — `cd web && nvm use && npm start`. `proxy.conf.json` forwards
+`/api` to `localhost:8080`, so Caddy + the `api` container must be up too.
+
+## Project layout
+
+- `api/` — backend (see `api/CLAUDE.md`)
+- `web/` — frontend (see `web/CLAUDE.md`)
+- `infrastructure/` — `docker-compose.yml`, `Caddyfile`, `.env.example`
+- `docs/` — domain model, ADRs, conventions, troubleshooting (see root `CLAUDE.md`)
