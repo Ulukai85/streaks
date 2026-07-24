@@ -8,6 +8,8 @@ read it before doing anything non-trivial. This file just orients you.
 - `docs/domain.md` — the period/streak domain model, restated as prose. Read
   this before touching anything cadence- or streak-related.
 - `docs/decisions/` — ADRs. One is required before any new dependency.
+- `docs/troubleshooting.md` — local dev/tooling issues (Docker, IDE) that
+  aren't project bugs.
 - `api/CLAUDE.md` — backend rules (.NET/EF Core specifics).
 - `web/CLAUDE.md` — frontend rules (Angular specifics).
 

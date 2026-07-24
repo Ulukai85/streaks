@@ -18,7 +18,11 @@ folders, when a service class is warranted).
   (three sentences: what problem, what alternative was considered, why
   this).
 - Integration tests use **Testcontainers with real PostgreSQL** — never
-  in-memory, never SQLite (see ADR 0003).
+  in-memory, never SQLite (see ADR 0003). If `dotnet test` fails pulling an
+  image with a Docker "Unauthorized" error, see `docs/troubleshooting.md` —
+  it's a local Docker config issue, not a code problem.
+- Test assertions use **AwesomeAssertions**, not FluentAssertions (license
+  change in FA v8 — see ADR 0005).
 - `Cadence` is persisted **as a string**, not an int.
 - Write the streak query as **raw SQL** via `db.Database.SqlQuery<T>()`.
   Do not attempt gaps-and-islands in LINQ.
