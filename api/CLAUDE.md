@@ -2,7 +2,7 @@
 
 Backend-specific rules. See root `CLAUDE.md` and `docs/` for project-wide
 context; `docs/domain.md` is authoritative for period/streak logic, and
-`docs/conventions.md` covers code organization (vertical slices, feature
+`docs/aspnet-conventions.md` covers code organization (vertical slices, feature
 folders, when a service class is warranted).
 
 ## Hard rules
@@ -29,7 +29,7 @@ folders, when a service class is warranted).
 
 ## Conventions
 
-See `docs/conventions.md` for code organization. Beyond that:
+See `docs/aspnet-conventions.md` for code organization. Beyond that:
 
 - FluentValidation for request validation.
 - Errors returned as RFC 7807 problem details.

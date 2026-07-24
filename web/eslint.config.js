@@ -7,6 +7,11 @@ const eslintConfigPrettier = require('eslint-config-prettier');
 
 module.exports = defineConfig([
   {
+    // spartan-ng's copied Helm components (docs/angular-conventions.md) — vendored code we
+    // own but don't rename to match our own selector/style conventions.
+    ignores: ['src/app/ui/**'],
+  },
+  {
     files: ['**/*.ts'],
     extends: [
       eslint.configs.recommended,

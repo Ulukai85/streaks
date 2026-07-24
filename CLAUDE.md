@@ -8,10 +8,24 @@ read it before doing anything non-trivial. This file just orients you.
 - `docs/domain.md` — the period/streak domain model, restated as prose. Read
   this before touching anything cadence- or streak-related.
 - `docs/decisions/` — ADRs. One is required before any new dependency.
+- `docs/aspnet-conventions.md` — backend code organization conventions.
+- `docs/angular-conventions.md` — frontend code organization conventions.
 - `docs/troubleshooting.md` — local dev/tooling issues (Docker, IDE) that
   aren't project bugs.
+- `docs/existing-problems.md` — known unresolved issues (e.g. upstream
+  dependency vulnerabilities) with the reasoning for leaving them as-is.
 - `api/CLAUDE.md` — backend rules (.NET/EF Core specifics).
 - `web/CLAUDE.md` — frontend rules (Angular specifics).
+
+## MCP servers
+
+- Angular-specific questions (docs, best practices, code examples,
+  migrations) go through the **Angular CLI MCP server**, not context7.
+- Everything else (other libraries, frameworks, SDKs, CLIs, cloud
+  services) keeps using **context7** as usual.
+- If an MCP query surfaces something durably relevant to this project,
+  write it concisely into the relevant CLAUDE.md/conventions file so the
+  server doesn't need to be queried again for the same fact.
 
 ## Non-negotiables (see PROJECT-BRIEF.md §2–3 for full list + rationale)
 
