@@ -1,0 +1,8 @@
+# OS / desktop environment junk
+.DS_Store
+.directory
+Thumbs.db
+desktop.ini
+
+# Claude Code local overrides (personal, machine-specific)
+.claude/settings.local.json
