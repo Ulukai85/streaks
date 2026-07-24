@@ -1,8 +1,7 @@
-# 1. Calendar periods over rolling intervals
+# ADR 0001 — Calendar periods over rolling intervals
 
-## Status
-
-Accepted.
+Date: 2026-07-24
+Status: Accepted
 
 ## Context
 

@@ -37,6 +37,6 @@ actively maintained, API-compatible with the FluentAssertions syntax.
 ## Consequences
 
 - Test code uses `result.Should().Be(...)`-style assertions throughout
-  `api/tests/Api.Tests/`.
+  `api/Api.Tests/`.
 - If AwesomeAssertions stalls or FluentAssertions relicenses again, revisiting
   this is a mechanical `using` + package swap, not a rewrite.

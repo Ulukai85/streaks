@@ -8,7 +8,10 @@ Stack: ASP.NET Core (.NET 10) + EF Core/PostgreSQL API in `api/`, Angular 22
 frontend in `web/`, Docker Compose + Caddy deployment config in
 `infrastructure/`.
 
-## Running the full stack (Docker Compose)
+## Running the backend stack (Docker Compose)
+
+This brings up Postgres, the API, and Caddy — not the frontend (see "Local
+development" below to run that).
 
 ```bash
 cd infrastructure
@@ -36,12 +39,13 @@ volume).
 
 ## Local development (without full containerization)
 
-**Backend** — `cd api/src/Api && dotnet run`. Uses the connection string in
+**Backend** — `cd api/Api && dotnet run`. Uses the connection string in
 `appsettings.Development.json`, which points at `localhost:5433` — so the
 compose Postgres must be running (`docker compose up -d postgres` is enough).
 
 **Frontend** — `cd web && nvm use && npm start`. `proxy.conf.json` forwards
-`/api` to `localhost:8080`, so Caddy + the `api` container must be up too.
+`/api` to `localhost:5154`, i.e. straight to the `dotnet run` instance above
+— only Postgres needs to be running via compose for this loop.
 
 ## Project layout
 

@@ -13,7 +13,10 @@ public static class HealthEndpoints
             var connected = await db.Database.CanConnectAsync(ct);
             return connected
                 ? Results.Ok(new HealthResponse("ok", true))
-                : Results.Json(new HealthResponse("unhealthy", false), statusCode: StatusCodes.Status503ServiceUnavailable);
+                : Results.Problem(
+                    title: "Service unavailable",
+                    detail: "Database connection failed.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
         });
     }
 }

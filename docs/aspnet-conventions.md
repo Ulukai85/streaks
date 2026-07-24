@@ -9,7 +9,7 @@ repository abstraction).
 ## Vertical slices, not horizontal layers
 
 Code is organized by feature, not by technical layer. Each feature folder
-under `api/src/Features/<Feature>/` owns its own endpoints, DTOs, and
+under `api/Api/Features/<Feature>/` owns its own endpoints, DTOs, and
 validators — there is no top-level `Controllers/`, `Services/`, or `Dtos/`
 grouping everything by kind instead of by feature.
 

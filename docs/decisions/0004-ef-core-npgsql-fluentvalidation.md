@@ -33,4 +33,4 @@ declarative rule syntax and testability beat for anything beyond a null check.
 
 None beyond what ADR 0002 (no repository abstraction) and ADR 0003
 (Testcontainers) already establish — `AppDbContext` is the abstraction,
-migrations and query classes live under `api/src/Features/<Feature>/`.
+migrations and query classes live under `api/Api/Features/<Feature>/`.
