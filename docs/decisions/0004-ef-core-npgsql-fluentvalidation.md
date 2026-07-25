@@ -34,3 +34,15 @@ declarative rule syntax and testability beat for anything beyond a null check.
 None beyond what ADR 0002 (no repository abstraction) and ADR 0003
 (Testcontainers) already establish — `AppDbContext` is the abstraction,
 migrations and query classes live under `api/Api/Features/<Feature>/`.
+
+## Addendum — HasData rejected for dev-user seeding (2026-07-25)
+
+The Phase 2 Stage 1 dev user is seeded via code at startup
+(`if (!await db.Users.AnyAsync()) db.Users.Add(...)`, gated to
+`Development`), not EF Core's `HasData`. `HasData` requires compile-time
+constant seed values baked into the migration snapshot — awkward for a
+`User` row that gains ASP.NET Core Identity fields in Phase 3 (see ADR
+0007), and any later edit to seed data via `HasData` produces a phantom
+migration diff even when nothing about the schema itself changed. This is
+the same "tooling/process note on an already-decided ADR" pattern already
+used for `Microsoft.EntityFrameworkCore.Design` in Phase 2 Stage 0.

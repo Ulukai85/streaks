@@ -14,6 +14,8 @@ builder.Services.AddProblemDetails();
 
 var app = builder.Build();
 
+await app.MigrateAndSeedAsync();
+
 // Pipeline phase
 
 app.UseExceptionHandler();

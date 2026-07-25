@@ -19,8 +19,10 @@ phase has to deliver an end-to-end usable app (without auth) on its own.
 
 **Confirmed decisions (do not re-litigate):**
 - New minimal `User` table now: `Id (Guid), TimeZoneId`. No credentials/identity
-  fields — Phase 3 extends this same table with ASP.NET Core Identity fields
-  rather than replacing it. One hardcoded dev user seeded via migration,
+  fields configured yet — Phase 3 extends this same table with ASP.NET Core
+  Identity fields rather than replacing it (`User : IdentityUser<Guid>` from
+  Stage 1 onward, see ADR 0007). One hardcoded dev user seeded via code at
+  startup (dev environment only, not `HasData` — see ADR 0004 addendum),
   `TimeZoneId = "Europe/Berlin"`.
 - Phase 2 includes UI: backend API + enough Angular UI to actually use the app
   daily (add challenge, dashboard, tick off, streak display).
@@ -73,7 +75,7 @@ valid request (calls next()).
 
 ## Stage 1 — Domain entities, EF config, migrations, seed user
 
-**Status: Not started**
+**Status: Done**
 
 Use the existing (currently empty) `Api/Domain/` folder for entities and enums.
 
@@ -81,19 +83,32 @@ Use the existing (currently empty) `Api/Domain/` folder for entities and enums.
    via `HasConversion<string>()` → persisted as `"Daily"/"Weekly"/"Monthly"`.
    Must exist before Checkpoint A since the human's `PeriodStartFor` signature
    depends on it.
-2. `User` entity (`Api/Domain/User.cs`: `Id, TimeZoneId`) + EF config
-   (`Api/Data/Configurations/UserConfiguration.cs`) with `HasData(...)` seeding
-   the dev user (`Europe/Berlin`). Add `DbSet<User> Users` to `AppDbContext`,
-   wire `ApplyConfigurationsFromAssembly` in `OnModelCreating`.
+2. `User` entity (`Api/Domain/User.cs`: `User : IdentityUser<Guid>` + `TimeZoneId`,
+   see ADR 0007) + EF config (`Api/Data/Configurations/UserConfiguration.cs`).
+   Dev user is seeded via code at startup, not `HasData` (see ADR 0004
+   addendum — `HasData` bakes seed rows into the migration as compile-time
+   constants, which fights the Identity fields `User` gains in Phase 3). Add
+   `DbSet<User> Users` to `AppDbContext`, wire `ApplyConfigurationsFromAssembly`
+   in `OnModelCreating`.
 3. `Challenge` entity + config: FK to `User`, `Cadence` as string,
    index on `(UserId, ArchivedAt)`.
 4. `Completion` entity + config: FK to `Challenge`, **unique index on
    `(ChallengeId, PeriodStart)`** (DB-enforced per ADR 0003).
-5. Generate migrations per entity (`dotnet ef migrations add ...`).
+5. ~~Generate migrations per entity~~ — generate a single `InitialCreate`
+   migration once all four entities and their configs exist. Migrations
+   represent schema deltas to deploy, not entities defined; nobody will ever
+   apply the `User` table without `Challenge`/`Completion`.
 
-**Verify:** clean migrations, `dotnet build`; apply against local Postgres
-(or rely on Stage 2's automated `MigrateAsync`) to confirm they run and the
-seed row inserts.
+**Verify:** `dotnet build` clean; migration generation produces no pending
+model changes; generated migration SQL confirmed to declare `PeriodStart`
+and `StartsOn` as `date` (grepped from the migration file); migration applied
+against local Postgres (`dotnet run`), confirming the seed row inserts once
+and stays at one row across a restart; manual psql check that the unique
+index on `(ChallengeId, PeriodStart)` rejects a duplicate insert and that
+deleting a `Challenge` with existing `Completion` rows fails with a
+foreign-key violation (not a cascade) — per ADR 0003's "test the constraint,
+not the code that avoids it." Stage 2's automated integration tests still
+need to assert the same constraints once the test harness exists.
 
 ---
 

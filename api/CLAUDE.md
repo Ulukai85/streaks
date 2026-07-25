@@ -16,7 +16,12 @@ folders, when a service class is warranted).
   abstraction (see ADR 0002).
 - **No new NuGet dependency without an ADR** in `docs/decisions/` first
   (three sentences: what problem, what alternative was considered, why
-  this).
+  this). Note: `IdentityUser<TKey>` (`Microsoft.AspNetCore.Identity`) and the
+  rest of ASP.NET Core Identity ship in the shared framework — a
+  `Microsoft.NET.Sdk.Web` project like `Api.csproj` references it implicitly,
+  so deriving `User : IdentityUser<Guid>` (ADR 0007) did not need a new
+  package. Only `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (stores,
+  `IdentityDbContext`) would count as new — not needed yet, Phase 3's call.
 - Integration tests use **Testcontainers with real PostgreSQL** — never
   in-memory, never SQLite (see ADR 0003). If `dotnet test` fails pulling an
   image with a Docker "Unauthorized" error, see `docs/troubleshooting.md` —
