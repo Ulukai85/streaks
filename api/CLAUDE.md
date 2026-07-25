@@ -22,7 +22,10 @@ folders, when a service class is warranted).
   image with a Docker "Unauthorized" error, see `docs/troubleshooting.md` —
   it's a local Docker config issue, not a code problem.
 - Test assertions use **AwesomeAssertions**, not FluentAssertions (license
-  change in FA v8 — see ADR 0005).
+  change in FA v8 — see ADR 0005). Use it consistently — `result.Should()...`
+  even for type checks (`.Should().BeOfType<T>()`, `.Which` to unwrap). Only
+  fall back to xUnit's `Assert` when there's genuinely no AwesomeAssertions
+  equivalent.
 - `Cadence` is persisted **as a string**, not an int.
 - Write the streak query as **raw SQL** via `db.Database.SqlQuery<T>()`.
   Do not attempt gaps-and-islands in LINQ.
