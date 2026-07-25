@@ -51,6 +51,23 @@ phase / pipeline phase) instead of accreting logic as the app grows.
 `AppDbContext`, `Configurations/`, `DevSeed`) — it isn't a feature, so it
 doesn't belong under `Features/`.
 
+## Primary constructors for dependency-holding classes
+
+Prefer a primary constructor (`class Foo(Dependency dep) : Base(dep)`) over a
+manually written constructor + backing fields, for classes whose constructor
+body would only assign parameters to fields — test fixtures, `WebApplicationFactory`
+subclasses, base classes, anything DI-shaped. `AppDbContext(DbContextOptions<AppDbContext> options)`,
+`ApiFactory(PostgresFixture postgres)`, and `IntegrationTestBase(PostgresFixture postgres, ApiFactory factory)`
+are all this shape.
+
+**Exception:** domain entities under `Api/Domain/` (`User`, `Challenge`,
+`Completion`) keep object-initializer style with `required` settable
+properties, not primary constructors — EF Core materializes and updates them
+through property setters by convention, and `new Challenge { Name = ..., }`-style
+construction (Stage 4's create endpoint, tests) reads better against that
+than positional constructor args would. Reach for a primary constructor by
+default; keep the object-initializer style for entities that EF owns.
+
 ## EF configuration habits for new entities
 
 - Pin `DateOnly` columns with `.HasColumnType("date")` explicitly in the

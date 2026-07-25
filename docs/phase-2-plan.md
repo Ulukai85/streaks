@@ -114,26 +114,52 @@ need to assert the same constraints once the test harness exists.
 
 ## Stage 2 — Integration test harness (blocks all later backend tests)
 
-**Status: Not started**
+**Status: Done**
 
-Only a raw-Npgsql smoke test exists today — nothing runs EF migrations or
-exercises `AppDbContext`/endpoints yet.
+`Api.Tests/Infrastructure/` now holds the shared harness, alongside the
+pre-existing `ValidationFilterTests.cs`; `DatabaseSmokeTests.cs` (raw-Npgsql,
+ad-hoc container) is unmodified and coexists, out of scope.
 
-- `Api.Tests/Infrastructure/PostgresFixture.cs`: `IAsyncLifetime` wrapping
+- `PostgresFixture.cs`: `IAsyncLifetime` wrapping
   `PostgreSqlBuilder("postgres:18-alpine")`, shared via
-  `ICollectionFixture<PostgresFixture>`; on init, runs
-  `AppDbContext.Database.MigrateAsync()` against the container. Include a
-  `ResetDatabaseAsync()` helper (`TRUNCATE` challenges/completions, leave
-  `Users` alone) for per-test isolation.
-- `Api.Tests/Infrastructure/ApiFactory.cs`: `WebApplicationFactory<Program>`
-  pointed at the fixture's connection string, so HTTP-level tests exercise the
-  real pipeline (validation filter, problem details) against real Postgres.
-  Requires adding `Microsoft.AspNetCore.Mvc.Testing` (flag as new-NuGet).
-- `Api.Tests/Infrastructure/IntegrationTestBase.cs`: combines both for
-  feature test classes.
+  `ICollectionFixture<PostgresFixture>` (one `[CollectionDefinition]` in
+  `IntegrationTestCollection.cs`, referenced everywhere by its `const string
+  Name`, never a literal). On init, runs its own throwaway
+  `AppDbContext.Database.MigrateAsync()` against the container.
+  `ResetDatabaseAsync()` truncates `Completions`/`Challenges` together
+  (satisfies the `Restrict` FK without `CASCADE`), leaves `Users` alone, and
+  throws if `Users` doesn't come out to exactly 1 row afterward — a future
+  test that creates a second user fails loudly instead of leaking it.
+- `ApiFactory.cs`: `WebApplicationFactory<Program>`, constructor takes
+  `PostgresFixture` (a supported class-fixture-depends-on-collection-fixture
+  pattern in xUnit v2 — collection-fixture-to-collection-fixture is *not*
+  supported, which is why `ApiFactory` is an `IClassFixture`, not a second
+  `ICollectionFixture`, rebuilding the lightweight host per test class while
+  the container itself stays shared). `ConfigureWebHost` sets
+  `Environment = "Development"` (so `Program.cs`'s real seed logic fires) and
+  overrides `AppDbContext`'s registration via `ConfigureTestServices` +
+  `RemoveAll<DbContextOptions<AppDbContext>>()` to point at the container,
+  never the real dev DB. Added `Microsoft.AspNetCore.Mvc.Testing` 10.0.10
+  (ADR 0003 addendum) plus an explicit `Microsoft.EntityFrameworkCore.Relational`
+  10.0.10 pin (resolved a transitive version-conflict warning from the
+  Npgsql provider's own dependency range).
+- `IntegrationTestBase.cs`: abstract base combining both — exposes `Client`,
+  a `CreateDbContext()` factory (fresh instance per call, so arrange and
+  assert never share one change tracker), and a `ResetDatabase()` wrapper for
+  tests that want to trigger a second, mid-test reset explicitly; resets the
+  DB in `InitializeAsync()` before every test method automatically.
+- `DatabaseHarnessTests.cs`: proves the harness itself — dev-user round-trip,
+  a real HTTP call through the pipeline, a self-contained test that inserts a
+  `Challenge`, calls `ResetDatabase()` again mid-test, and asserts it's gone
+  (proves reset directly, without depending on xUnit's execution order
+  between two separate tests), and an EF-level duplicate-`(ChallengeId, PeriodStart)`
+  insert asserting `DbUpdateException` through the full stack.
 
-**Verify:** a trivial test asserting the seeded dev user round-trips through
-`AppDbContext` with `AsNoTracking()`; `dotnet test` green.
+**Verify:** `dotnet test` green (8/8, full suite); confirmed via `docker ps`
+sampling that exactly one ephemeral Postgres container serves the whole
+`DatabaseHarnessTests` run; confirmed a typo'd `[Collection(...)]` reference
+fails at **compile time** (`xUnit1041` analyzer error), not just silently —
+stronger than the const-symbol mitigation alone.
 
 ---
 

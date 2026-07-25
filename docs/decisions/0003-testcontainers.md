@@ -53,3 +53,15 @@ project, including unit-style tests of query classes.
 - **SQLite** — rejected: closer to a real engine than InMemory, but still diverges
   from Postgres on constraint behavior, date/time handling, and does not support the
   raw SQL the streak query depends on.
+
+## Addendum — Microsoft.AspNetCore.Mvc.Testing for WebApplicationFactory (2026-07-25)
+
+Stage 2's integration harness needs `WebApplicationFactory<Program>` to run
+HTTP-level tests against the real Minimal API pipeline, backed by the
+Testcontainers Postgres this ADR already mandates. `Microsoft.AspNetCore.Mvc.Testing`
+is the package that ships `WebApplicationFactory` — it is the tooling package
+that makes the already-decided Testcontainers approach work over HTTP rather
+than only via a direct `AppDbContext`, not a new stack decision (same
+reasoning as the `Microsoft.EntityFrameworkCore.Design` addendum in Phase 2
+Stage 0). No alternative was considered: it's the one Microsoft-shipped
+package for this purpose.

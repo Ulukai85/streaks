@@ -48,6 +48,14 @@ disables Testcontainers' own cleanup container, so every crashed or
 Ctrl-C'd test run leaves an orphaned Postgres container running — it hides
 the symptom without fixing the auth problem underneath.
 
+A version bump of a test image (e.g. `postgres:18-alpine`), or a first run
+on a fresh machine, needs a manual `docker pull postgres:18-alpine` under
+the working `DOCKER_CONFIG` above before `dotnet test` can pull it
+automatically — Testcontainers .NET resolves auth against `DOCKER_CONFIG`,
+not the CLI's own defaults, so a missing local image plus the anonymous-pull
+config can otherwise produce a failure that looks unrelated to image
+versioning.
+
 ## Compose Postgres is mapped to host port 5433, not 5432
 
 This dev machine runs a native `postgresql.service` on 5432, so

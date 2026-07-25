@@ -24,8 +24,3 @@ app.UseStatusCodePages();
 app.MapHealthEndpoints();
 
 app.Run();
-
-// Top-level statements compile to an internal Program class; WebApplicationFactory<Program>
-// (used by Api.Tests for endpoint tests, see Stage 2) needs a type it can see from another
-// assembly, so this partial declaration widens it to public.
-public partial class Program;
