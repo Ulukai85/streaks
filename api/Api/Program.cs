@@ -1,5 +1,8 @@
 using Api.Data;
+using Api.Features.Challenges;
 using Api.Features.Health;
+using Api.Infrastructure;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +15,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddProblemDetails();
 
+builder.Services.AddScoped<ICurrentUserProvider, DevCurrentUserProvider>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IValidator<CreateChallengeRequest>, CreateChallengeRequestValidator>();
+
 var app = builder.Build();
 
 await app.MigrateAndSeedAsync();
@@ -22,5 +29,6 @@ app.UseExceptionHandler();
 app.UseStatusCodePages();
 
 app.MapHealthEndpoints();
+app.MapChallengeEndpoints();
 
 app.Run();

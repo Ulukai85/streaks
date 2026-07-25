@@ -12,6 +12,10 @@ folders, when a service class is warranted).
 - **`<Nullable>enable</Nullable>` and `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`**
   project-wide. Nullable warnings are build errors, not suggestions.
 - **`AsNoTracking()` on every read path.** No exceptions in v1.
+- **No endpoint reads a hardcoded user id directly.** Inject
+  `ICurrentUserProvider` (`Api/Infrastructure/`) instead — `DevCurrentUserProvider`
+  is the only Phase 2 implementation. Phase 3 auth becomes a one-line DI
+  swap instead of a hunt through every endpoint and test.
 - **No repository pattern over EF Core.** `DbContext` is already the
   abstraction (see ADR 0002).
 - **No new NuGet dependency without an ADR** in `docs/decisions/` first

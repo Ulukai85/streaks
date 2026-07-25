@@ -180,28 +180,49 @@ zero dependency on period math, proceed in parallel.
 
 ## Stage 4 — Challenge CRUD endpoints (parallel to Stage 3)
 
-**Status: Not started**
+**Status: Done**
 
 Vertical slice under `Api/Features/Challenges/`, pattern-matched against
 `Features/Health/`.
 
-1. DTOs + validator: `CreateChallengeRequest`, `ChallengeResponse`,
-   `CreateChallengeRequestValidator` (name required, cadence must parse,
-   valid URL if present, color in the fixed palette, non-negative sort
-   order). `TargetCount` is not in the request DTO — server always persists
-   `1`.
-2. `POST /api/challenges` — create, hardcoded dev-user id, 201 +
-   `ChallengeResponse`.
-3. `GET /api/challenges` — `AsNoTracking()`, non-archived by default, ordered
-   by `SortOrder`.
-4. `POST /api/challenges/{id}/archive` — sets `ArchivedAt`, 404 if missing.
+- `ICurrentUserProvider` (`Api/Infrastructure/`) introduced ahead of Phase 3:
+  endpoints inject it instead of reading a hardcoded Guid, so wiring up real
+  auth later is a one-line DI swap. `DevSeed.UserId` is now `internal` (was
+  `private`) so `DevCurrentUserProvider` can read it; still not visible to
+  `Api.Tests` — tests get the seeded user via `db.Users.Single()`, per the
+  Stage 2 precedent.
+- `CreateChallengeRequest`/`ChallengeResponse`/`CreateChallengeRequestValidator`:
+  name required, cadence must parse (case-insensitive), color checked
+  against `Api/Domain/ChallengeColors.cs` (single source of truth: `red,
+  orange, amber, green, teal, blue, indigo, pink`), URL — when non-blank —
+  must be an absolute `http`/`https` URL (rejects `javascript:`/`file:`/relative
+  paths). `Cadence` travels as a string on both request and response,
+  matching how it's persisted. `TargetCount` is not client-settable —
+  server always persists `1`. `SortOrder` is optional; omitted means
+  append-at-end (current max for that user + 1, or `0`). `StartsOn` is not
+  client-settable either — computed server-side via
+  `PeriodCalculator.PeriodStartFor(timeProvider.GetUtcNow(), user.TimeZoneId, Cadence.Daily)`,
+  reusing the Stage 3 function as the one definition of "today" (required
+  registering `TimeProvider` in DI — no endpoint calls `DateTimeOffset.UtcNow` directly).
+- `POST /api/challenges/` — `201 Created` with a real `Location` header
+  (`TypedResults.Created`), not a bare status code.
+- `GET /api/challenges/` — `AsNoTracking()`, non-archived only, ordered by
+  `SortOrder`.
+- `POST /api/challenges/{id}/archive` — idempotent: already-archived
+  returns `200` + the existing state (not re-stamped, not an error);
+  unknown/other-user id returns `404`.
 
 No general update endpoint — brief's v1 scope only lists create + tick-off;
 archive is the only other listed mutation.
 
-**Verify:** `dotnet test --filter Challenges` after each endpoint — create
-persists/validates, list shape/ordering, archive sets `ArchivedAt` and is
-idempotent-safe.
+**Verify:** `dotnet test --filter Challenges` green (26 validator unit
+tests + 7 integration tests, including an empty-`Name` → `400` RFC 7807
+case and an idempotent-archive-twice case); full suite still green. One
+real finding along the way: comparing `ArchivedAt` across two HTTP
+round-trips needs `BeCloseTo`, not exact equality — Postgres `timestamptz`
+truncates to microsecond precision while .NET `DateTimeOffset` ticks are
+100ns, so a value read back from the DB loses the last digit of precision
+versus the in-memory value from the initial write.
 
 ---
 
