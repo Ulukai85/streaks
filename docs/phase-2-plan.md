@@ -423,24 +423,64 @@ streak), then cleaned up the throwaway rows.
 
 ## Stage 8 — Angular: Challenge feature (not blocked by either checkpoint)
 
-**Status: Not started**
+**Status: Done**
 
-1. `features/challenges/challenge.model.ts`, `challenges.service.ts` —
-   signals-based service per web/CLAUDE.md, `httpResource` for reads
-   (matching `HealthStatus`'s pattern), `create()`/`archive()` methods that
-   `reload()` the resource on success.
-2. `challenge-list.ts` — standalone, `OnPush`, spartan `card` + cadence
-   badge, archive button, `@if`/`@for`, loading/error states.
-3. `challenge-form.ts` — reactive forms + spartan `input`/`select`/`field`
-   + `toggle-group` for the fixed color palette. Generate missing spartan
-   components via `ng g @spartan-ng/cli:ui` (consult the installed
-   `spartan` skill, don't guess APIs). Surface FluentValidation's
-   per-field problem-details errors on the form.
-4. Add `/challenges` route in `app.routes.ts`.
+Confirmed with the human before implementing: form and list live together on
+one `/challenges` page (inline, no dialog); archive requires a
+`window.confirm()` step first (one-way in v1 — no unarchive endpoint exists);
+`SortOrder` is never exposed in the UI (server always auto-appends); test
+coverage goes beyond the zero-spec `HealthStatus` precedent.
 
-**Verify:** `ng test`; manual add → list → archive round-trip against the
-real backend from Stage 4 (`npm start` with proxy, or Angular CLI MCP
-devserver tools).
+- `features/challenges/challenge.model.ts`, `challenges.service.ts` —
+  signals-based service per web/CLAUDE.md, `httpResource` for reads
+  (matching `HealthStatus`'s pattern), `create()`/`archive()` methods that
+  `reload()` the resource on success. `create()` parses a `400`
+  `HttpValidationProblemDetails` body (`isValidationProblemDetails` type
+  guard) and rethrows it so the form can map errors onto controls.
+- `challenge-list.ts` — standalone, `OnPush`, routed page hosting
+  `<streaks-challenge-form>` inline above the list; spartan `card` per
+  challenge with a color swatch, cadence label, optional URL link, and an
+  archive button gated on `window.confirm()`.
+- `challenge-form.ts` — reactive forms (`FormGroup`/`FormControl`, not Signal
+  Forms) + spartan `field`/`input`/`toggle-group`. **Deviation from the
+  original plan wording:** cadence uses `toggle-group`, not `select` —
+  spartan's `select` component pulls in `@ng-icons/core`/`@ng-icons/lucide`
+  as a new npm dependency (would need an ADR), and spartan's own guidance
+  (`rules/forms.md`) already recommends `toggle-group`/`radio-group` over
+  `select` for "single choice from few," which cadence's 3 options are.
+  Server validation errors (`errors` dict, PascalCase keys) are mapped onto
+  matching controls (camelCase) via `control.setErrors({ server: message })`;
+  Angular's own validators (`required`, `maxlength`, a custom absolute-URL
+  validator) clear that on the next edit automatically. All UI text German
+  per PROJECT-BRIEF.md §9.
+- Generated spartan components: `input`, `field` (+ `label`, `separator`),
+  `toggle-group` (+ `toggle`) — all copy-in only, no new npm dependency.
+  (`select` was generated, found to require the icon package, and removed
+  again before it was ever wired up — see the deviation note above.)
+- Added `/challenges` route in `app.routes.ts` alongside the existing `''`
+  (`HealthStatus`) route.
+
+**Verify:** `ng test` green (4 new spec files, 8/8 passing) — required
+working around `httpResource`'s fetch being driven by an `effect()` that only
+runs on an actual `ApplicationRef.tick()`/`fixture.detectChanges()`, not by
+awaiting microtasks or `fixture.whenStable()` alone (the latter deadlocks
+against `HttpTestingController`, since it waits on the very request the test
+still needs to flush). `ng lint` clean (a bare `<label>` over the two
+toggle-groups initially failed `label-has-associated-control` — fixed by
+switching to `hlmFieldSet`/`hlmFieldLegend` on a native
+`<fieldset>`/`<legend>`, matching spartan's convention for option-groups).
+`ng build` clean. Manual round-trip via `dotnet run` (real dev Postgres, not
+the separate `infrastructure-*` Docker Compose stack already running
+locally) + `npm start` with proxy: created a challenge, hit the blank-name
+`400` validation-problem path, and archived it, all through the Angular dev
+proxy at `localhost:4200/api/...`, confirming the exact contract (camelCase
+response bodies, PascalCase `errors` keys, trailing-slash-sensitive
+`/api/challenges/` routes) the frontend code assumes. No browser/screenshot
+tool was available in this session, so the rendered UI (toggle-group swatch
+styling, card layout, German copy) was not visually confirmed — only the
+HTTP contract and the automated specs were. The human should open
+`http://localhost:4200/challenges` themselves before treating this stage as
+fully verified.
 
 ---
 
