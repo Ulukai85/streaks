@@ -1,16 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import {
-  AbstractControl,
-  FormControl,
-  FormGroup,
-  ReactiveFormsModule,
-  ValidationErrors,
-  Validators,
-} from '@angular/forms';
+  FormField,
+  FormRoot,
+  form,
+  maxLength,
+  required,
+  validate,
+  type ValidationError,
+} from '@angular/forms/signals';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInputImports } from '@spartan-ng/helm/input';
-import { HlmToggleGroupImports } from '@spartan-ng/helm/toggle-group';
 import {
   CADENCE_LABEL,
   Cadence,
@@ -21,170 +21,151 @@ import {
   CreateChallengeRequest,
 } from './challenge.model';
 import { ChallengesService, isValidationProblemDetails } from './challenges.service';
+import { ToggleGroupField, ToggleGroupOption } from './toggle-group-field';
 
-function absoluteHttpUrlValidator(control: AbstractControl<string>): ValidationErrors | null {
-  const value = control.value;
-  if (!value) {
-    return null;
-  }
+interface ChallengeFormModel {
+  name: string;
+  url: string;
+  cadence: Cadence | '';
+  color: ChallengeColor | '';
+}
+
+function emptyModel(): ChallengeFormModel {
+  return { name: '', url: '', cadence: '', color: '' };
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? null : { url: true };
+    return url.protocol === 'http:' || url.protocol === 'https:';
   } catch {
-    return { url: true };
+    return false;
   }
 }
 
-interface ChallengeFormControls {
-  name: FormControl<string>;
-  url: FormControl<string>;
-  cadence: FormControl<Cadence | null>;
-  color: FormControl<ChallengeColor | null>;
-}
-
-function buildForm(): FormGroup<ChallengeFormControls> {
-  return new FormGroup<ChallengeFormControls>({
-    name: new FormControl('', {
-      nonNullable: true,
-      validators: [Validators.required, Validators.maxLength(200)],
-    }),
-    url: new FormControl('', { nonNullable: true, validators: [absoluteHttpUrlValidator] }),
-    cadence: new FormControl<Cadence | null>(null, { validators: [Validators.required] }),
-    color: new FormControl<ChallengeColor | null>(null, { validators: [Validators.required] }),
-  });
+function toCamelCase(key: string): string {
+  return key.charAt(0).toLowerCase() + key.slice(1);
 }
 
 @Component({
   selector: 'streaks-challenge-form',
-  imports: [
-    ReactiveFormsModule,
-    ...HlmFieldImports,
-    ...HlmInputImports,
-    ...HlmToggleGroupImports,
-    ...HlmButtonImports,
-  ],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FormField, FormRoot, ToggleGroupField, ...HlmFieldImports, ...HlmInputImports, ...HlmButtonImports],
   template: `
-    <form [formGroup]="form" (ngSubmit)="submit()" class="flex flex-col gap-4">
+    <form [formRoot]="challengeForm" class="flex flex-col gap-4">
       <div hlmField>
         <label hlmFieldLabel for="name">Name</label>
-        <input hlmInput id="name" [formControl]="form.controls.name" />
-        @if (form.controls.name.invalid && form.controls.name.touched) {
-          <hlm-field-error>{{ errorMessage(form.controls.name) }}</hlm-field-error>
+        <input hlmInput id="name" [formField]="challengeForm.name" />
+        @if (challengeForm.name().touched() && challengeForm.name().invalid()) {
+          @for (error of challengeForm.name().errors(); track error) {
+            <hlm-field-error [forceShow]="true">{{ error.message }}</hlm-field-error>
+          }
         }
       </div>
 
       <div hlmField>
         <label hlmFieldLabel for="url">Link (optional)</label>
-        <input hlmInput id="url" placeholder="https://…" [formControl]="form.controls.url" />
-        @if (form.controls.url.invalid && form.controls.url.touched) {
-          <hlm-field-error>{{ errorMessage(form.controls.url) }}</hlm-field-error>
+        <input hlmInput id="url" placeholder="https://…" [formField]="challengeForm.url" />
+        @if (challengeForm.url().touched() && challengeForm.url().invalid()) {
+          @for (error of challengeForm.url().errors(); track error) {
+            <hlm-field-error [forceShow]="true">{{ error.message }}</hlm-field-error>
+          }
         }
       </div>
 
       <fieldset hlmFieldSet>
         <legend hlmFieldLegend>Rhythmus</legend>
-        <hlm-toggle-group type="single" [formControl]="form.controls.cadence">
-          @for (cadence of cadences; track cadence) {
-            <button hlmToggleGroupItem type="button" [value]="cadence">
-              {{ cadenceLabel[cadence] }}
-            </button>
+        <streaks-toggle-group-field [formField]="challengeForm.cadence" [options]="cadenceOptions" />
+        @if (challengeForm.cadence().touched() && challengeForm.cadence().invalid()) {
+          @for (error of challengeForm.cadence().errors(); track error) {
+            <hlm-field-error [forceShow]="true">{{ error.message }}</hlm-field-error>
           }
-        </hlm-toggle-group>
-        @if (form.controls.cadence.invalid && form.controls.cadence.touched) {
-          <hlm-field-error [forceShow]="true">Bitte einen Rhythmus wählen.</hlm-field-error>
         }
       </fieldset>
 
       <fieldset hlmFieldSet>
         <legend hlmFieldLegend>Farbe</legend>
-        <hlm-toggle-group type="single" [formControl]="form.controls.color">
-          @for (color of colors; track color) {
-            <button hlmToggleGroupItem type="button" [value]="color" [attr.aria-label]="colorLabel[color]">
-              <span class="size-4 rounded-full {{ colorSwatchClass[color] }}"></span>
-            </button>
+        <streaks-toggle-group-field [formField]="challengeForm.color" [options]="colorOptions" />
+        @if (challengeForm.color().touched() && challengeForm.color().invalid()) {
+          @for (error of challengeForm.color().errors(); track error) {
+            <hlm-field-error [forceShow]="true">{{ error.message }}</hlm-field-error>
           }
-        </hlm-toggle-group>
-        @if (form.controls.color.invalid && form.controls.color.touched) {
-          <hlm-field-error [forceShow]="true">Bitte eine Farbe wählen.</hlm-field-error>
         }
       </fieldset>
 
-      @if (submitError()) {
-        <p class="text-destructive text-sm">{{ submitError() }}</p>
+      @if (challengeForm().errors(); as rootErrors) {
+        @for (error of rootErrors; track error) {
+          <p class="text-destructive text-sm">{{ error.message }}</p>
+        }
       }
 
-      <button hlmBtn type="submit" class="self-start">Hinzufügen</button>
+      <button hlmBtn type="submit" class="self-start" [disabled]="challengeForm().submitting()">
+        Hinzufügen
+      </button>
     </form>
   `,
 })
 export class ChallengeForm {
   private readonly challengesService = inject(ChallengesService);
 
-  protected readonly cadences: Cadence[] = ['Daily', 'Weekly', 'Monthly'];
-  protected readonly colors = CHALLENGE_COLORS;
-  protected readonly cadenceLabel = CADENCE_LABEL;
-  protected readonly colorLabel = COLOR_LABEL;
-  protected readonly colorSwatchClass = COLOR_SWATCH_CLASS;
+  protected readonly cadenceOptions: ToggleGroupOption<Cadence>[] = (
+    ['Daily', 'Weekly', 'Monthly'] as const
+  ).map((cadence) => ({ value: cadence, label: CADENCE_LABEL[cadence] }));
 
-  protected readonly form = buildForm();
-  protected readonly submitError = signal<string | null>(null);
+  protected readonly colorOptions: ToggleGroupOption<ChallengeColor>[] = CHALLENGE_COLORS.map((color) => ({
+    value: color,
+    label: COLOR_LABEL[color],
+    swatchClass: COLOR_SWATCH_CLASS[color],
+  }));
 
-  protected errorMessage(control: AbstractControl): string {
-    const errors = control.errors;
-    if (!errors) {
-      return '';
-    }
-    if (errors['server']) {
-      return errors['server'] as string;
-    }
-    if (errors['required']) {
-      return 'Pflichtfeld.';
-    }
-    if (errors['maxlength']) {
-      return 'Zu lang.';
-    }
-    if (errors['url']) {
-      return 'Bitte eine gültige http(s)-URL angeben.';
-    }
-    return 'Ungültige Eingabe.';
-  }
+  private readonly model = signal<ChallengeFormModel>(emptyModel());
 
-  protected async submit(): Promise<void> {
-    if (this.form.invalid) {
-      this.form.markAllAsTouched();
-      return;
-    }
+  protected readonly challengeForm = form(
+    this.model,
+    (path) => {
+      required(path.name, { message: 'Pflichtfeld.' });
+      maxLength(path.name, 200, { message: 'Zu lang.' });
 
-    this.submitError.set(null);
-    const value = this.form.getRawValue();
-    const request: CreateChallengeRequest = {
-      name: value.name,
-      url: value.url || null,
-      cadence: value.cadence!,
-      color: value.color!,
-    };
+      validate(path.url, ({ value }) => {
+        const url = value();
+        if (!url || isAbsoluteHttpUrl(url)) {
+          return null;
+        }
+        return { kind: 'url', message: 'Bitte eine gültige http(s)-URL angeben.' };
+      });
 
-    try {
-      await this.challengesService.create(request);
-      this.form.reset({ name: '', url: '', cadence: null, color: null });
-    } catch (error) {
-      if (isValidationProblemDetails(error)) {
-        this.applyServerErrors(error.errors);
-      } else {
-        this.submitError.set('Der Server ist nicht erreichbar. Bitte später erneut versuchen.');
-      }
-    }
-  }
+      required(path.cadence, { message: 'Bitte einen Rhythmus wählen.' });
+      required(path.color, { message: 'Bitte eine Farbe wählen.' });
+    },
+    {
+      submission: {
+        action: async (field): Promise<ValidationError | ValidationError[] | undefined> => {
+          const value = this.model();
+          const request: CreateChallengeRequest = {
+            name: value.name,
+            url: value.url || null,
+            cadence: value.cadence as Cadence,
+            color: value.color as ChallengeColor,
+          };
 
-  private applyServerErrors(errors: Record<string, string[]>): void {
-    for (const [key, messages] of Object.entries(errors)) {
-      const controlName = (key.charAt(0).toLowerCase() + key.slice(1)) as keyof ChallengeFormControls;
-      const control = this.form.controls[controlName];
-      if (control) {
-        control.setErrors({ server: messages[0] });
-        control.markAsTouched();
-      }
-    }
-  }
+          try {
+            await this.challengesService.create(request);
+            this.model.set(emptyModel());
+            return undefined;
+          } catch (error) {
+            if (isValidationProblemDetails(error)) {
+              return Object.entries(error.errors).map(([key, messages]) => ({
+                kind: 'server',
+                message: messages[0],
+                fieldTree: field[toCamelCase(key) as keyof typeof field] ?? field,
+              }));
+            }
+            return {
+              kind: 'network',
+              message: 'Der Server ist nicht erreichbar. Bitte später erneut versuchen.',
+            };
+          }
+        },
+      },
+    },
+  );
 }

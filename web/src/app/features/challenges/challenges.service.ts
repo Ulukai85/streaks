@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse, httpResource } from '@angular/common/http';
-import { inject, Injectable } from '@angular/core';
+import { inject, Service } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Challenge, CreateChallengeRequest } from './challenge.model';
@@ -19,7 +19,7 @@ export function isValidationProblemDetails(value: unknown): value is ValidationP
   );
 }
 
-@Injectable({ providedIn: 'root' })
+@Service()
 export class ChallengesService {
   private readonly http = inject(HttpClient);
 

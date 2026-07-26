@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { CADENCE_LABEL, COLOR_SWATCH_CLASS } from './challenge.model';
@@ -8,7 +8,6 @@ import { ChallengesService } from './challenges.service';
 @Component({
   selector: 'streaks-challenge-list',
   imports: [ChallengeForm, ...HlmCardImports, ...HlmButtonImports],
-  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 p-4">
       <section hlmCard>
