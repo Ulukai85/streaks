@@ -38,6 +38,15 @@ folders, when a service class is warranted).
 - `Cadence` is persisted **as a string**, not an int.
 - Write the streak query as **raw SQL** via `db.Database.SqlQuery<T>()`.
   Do not attempt gaps-and-islands in LINQ.
+- **Two `db.Database.SqlQuery<T>()` gotchas** (hit and fixed while building
+  `StreakQuery`, will bite any future raw-SQL query the same way): a
+  trailing `;` inside the raw SQL text breaks composition when a LINQ
+  operator like `.FirstOrDefaultAsync()` follows (EF wraps the raw SQL in a
+  subquery, and the semicolon makes that invalid SQL); and result column
+  aliases must match the target record's property names **exactly** — EF
+  does not translate `snake_case`/lowercase column names to PascalCase
+  properties without the (unused here) `EFCore.NamingConventions` package,
+  so `AS ends_at` silently fails to bind to a property named `EndsAt`.
 
 ## Conventions
 

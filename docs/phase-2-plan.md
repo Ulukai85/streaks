@@ -270,6 +270,17 @@ versus the in-memory value from the initial write.
   second round trip. `Note` max length 500 (not specified in the brief,
   confirmed this session); blank `Note` persists as `null`, mirroring
   Stage 4's `Url` handling.
+- **Post-Stage-6 fix:** the `periodsAgo` bounds check alone let a
+  brand-new challenge accept a completion for a period before it existed
+  (still within "current ± 2" even though before `Challenge.StartsOn`) —
+  found while reviewing Stage 6's `StreakQuery` (its own `PeriodStart >=
+  startsOn` SQL filter protected the streak math from it, but the bad
+  completion still got persisted). Fixed with a second, explicit ordinal
+  comparison against `challenge.StartsOn` alongside the existing bound
+  check. `Post_Accepts_PeriodStart_Within_Bound` had to start backdating
+  the test challenge's `StartsOn` directly via `AppDbContext` — it had been
+  passing only because every freshly-created test challenge's `StartsOn`
+  defaults to "now," which happened to mask this exact gap.
 
 **Verify:** `dotnet test --filter "Completion|PeriodOrdinal"` green (24
 tests: `PeriodOrdinal` unit tests, validator unit tests, and integration
@@ -280,26 +291,62 @@ just non-200); full suite green (72/72). Manual `dotnet run` + `curl` smoke
 pass against the real dev DB confirmed the exception-handler wiring
 end-to-end (create → complete `201` → duplicate `409` → future date `400`
 → unknown id `404` → archive then complete `409`), then cleaned up the
-throwaway rows.
+throwaway rows. Full suite green again (106/106) after the post-Stage-6 fix
+above, including a new `Post_Rejects_PeriodStart_Before_Challenge_StartsOn`
+regression test.
 
 ---
 
 ## Stage 6 — HUMAN CHECKPOINT B: streak SQL (parallel to Stages 3-5)
 
-**Status: Not started**
+**Status: Done**
 
-**Hard stop.** Only needs the `Completion` table (Stage 1), so it can happen
-any time after Stage 1. Confirm:
-- Location: `Api/Features/Streaks/StreakQuery.cs` (or colocated with
-  Dashboard), using `db.Database.SqlQuery<T>()` per ADR 0002.
-- Result contract dependents will code against (e.g. a
-  `StreakResult(int Length, bool IsAlive)`-shaped record) — ask the human,
-  don't guess.
-- Covers: current-or-previous-ordinal "alive" rule, periods before
-  `StartsOn` excluded, archived challenges freeze their streak.
+Written by the human per the off-limits rule. The agent implemented the test
+suites afterward on the human's explicit instruction (a deliberate, confirmed
+exception to "including their test suites" in the off-limits note below —
+not a standing precedent for future checkpoints).
 
-**Blocked on this:** streak display on the Dashboard (Stage 7.2) and Angular
-streak badge (Stage 9.3). Not blocked: everything else in Stage 7.
+- `Api/Features/Streaks/StreakQuery.cs`/`StreakRow.cs`/`StreakResult.cs`.
+  Result contract: `StreakResult(int Length, bool IsAlive, DateOnly?
+  LastCompletedPeriod)`.
+- One query shared across all three cadences via `CASE {cadence} WHEN
+  'Daily' THEN ... END AS ord` inside the SQL itself, rather than three
+  near-duplicate query strings — keeps the query always-valid, complete SQL
+  so `//language=sql` highlighting/parsing keeps working (an earlier draft
+  templated the `ord` expression in via string `Replace()`, which broke it).
+- Filters `WHERE "PeriodStart" >= {startsOn}` directly in the SQL, so periods
+  before a challenge's `StartsOn` are excluded from the gaps-and-islands
+  computation itself, not just patched around afterward.
+- Archived challenges freeze via `archivedAtLocalDateOnly ?? today`: the
+  caller passes `ArchivedAt` already converted to the user's local period
+  start, and the alive/dead rule is evaluated as of that instant forever
+  after, never against the real clock.
+- Two EF Core `SqlQuery<T>` gotchas surfaced during review and are now noted
+  in `api/CLAUDE.md` for any future raw-SQL work: a trailing `;` inside the
+  raw SQL breaks `.FirstOrDefaultAsync()`'s query composition, and result
+  column aliases must match the target record's property names exactly (no
+  snake_case translation without the unused `EFCore.NamingConventions`
+  package).
+- One real bug caught along the way: an early draft derived
+  `LastCompletedPeriod` from `MAX("CompletedAt")` run back through
+  `PeriodStartFor` — reintroducing the "`PeriodStart` derived from
+  `CompletedAt` at read time" mistake `docs/domain.md` warns against, wrong
+  whenever an older period in the same island is backfilled *after* a newer
+  one was completed on time. Fixed by carrying `PeriodStart` itself through
+  the query (`MAX("PeriodStart")`) instead of touching `CompletedAt`.
+
+**Verify:** `Api.Tests/Features/Streaks/StreakQueryTests.cs` — pure C#, no
+database — hand-transcribes the SQL's ordinal arithmetic independently of
+`PeriodOrdinal.For` and asserts the two agree across a spread of dates,
+including the 2026-W53→2027-W01 ISO year boundary (12 cases).
+`StreakQueryBehaviorTests.cs` — Testcontainers, seeding `Challenge`/
+`Completion` directly via `AppDbContext` — exercises the alive/dead rule
+against real Postgres: current-period alive, previous-period grace alive,
+dead at exactly a 2-period gap, a brand-new zero-completion challenge reads
+as fresh rather than broken, archived-freeze alive/dead evaluated against
+`ArchivedAt` rather than the clock, and a regression case for the
+`LastCompletedPeriod` bug above (21 cases, 7 scenarios × 3 cadences). Full
+suite green: 105/105.
 
 ---
 
@@ -315,9 +362,9 @@ streak badge (Stage 9.3). Not blocked: everything else in Stage 7.
    open vs. done, computes days-remaining-in-period for urgency sort within
    the open group (§6.4). Streak field stubbed as a placeholder (e.g. `null`)
    until step 2 — this is the one deliberate placeholder, clearly temporary,
-   never asserted-correct in tests until Checkpoint B lands.
-2. **Wire in real streak query** (blocked on Checkpoint B): replace the
-   placeholder with real `StreakQuery` calls per challenge.
+   never asserted-correct in tests until step 2 wires in the real query.
+2. **Wire in real streak query** (unblocked — Checkpoint B is done): replace
+   the placeholder with real `StreakQuery` calls per challenge.
 
 **Verify:** integration tests seeding challenges/completions directly via
 `AppDbContext`, asserting grouping/sorting (step 1, can be green before step
@@ -357,11 +404,11 @@ devserver tools).
    (`httpResource` for `GET /api/dashboard`), `dashboard-page.ts` — open
    section (tick-off button per card) + collapsible "done this period"
    section, empty state linking to `/challenges`. Can be built against
-   Stage 7's step-1 placeholder-streak shape without waiting on Checkpoint B.
+   Stage 7's step-1 placeholder-streak shape without waiting on step 2.
 2. Tick-off action wired to `POST /api/challenges/{id}/completions`, reload
    on success, surface RFC 7807 `detail` inline (not a generic toast).
-3. Streak badge (blocked on Stage 7 step 2 / Checkpoint B) — minimal, e.g.
-   spartan `badge` with count. No charts (heatmap is Phase 5).
+3. Streak badge (blocked on Stage 7 step 2) — minimal, e.g. spartan `badge`
+   with count. No charts (heatmap is Phase 5).
 4. Make Dashboard the `''` root route; move `HealthStatus` to `/health`
    (kept as a dev diagnostic). Plain `routerLink`s between the two — no
    full nav component needed for a single-user app.
@@ -369,7 +416,7 @@ devserver tools).
 **Verify:** `ng test`; manual end-to-end pass with both `dotnet run` and
 `npm start` running: add daily/weekly/monthly challenges, tick each off,
 confirm dashboard grouping/urgency/collapse per §6.4, confirm retroactive
-bound enforcement is visible, confirm streak count once Checkpoint B lands.
+bound enforcement is visible, confirm streak count is correct.
 
 ---
 

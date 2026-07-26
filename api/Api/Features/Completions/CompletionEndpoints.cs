@@ -57,6 +57,14 @@ public static class CompletionEndpoints
                     detail: "PeriodStart must be within the current period or the previous two.");
             }
 
+            if (PeriodOrdinal.For(periodStart, challenge.Cadence) < PeriodOrdinal.For(challenge.StartsOn, challenge.Cadence))
+            {
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status400BadRequest,
+                    title: "Invalid period",
+                    detail: "PeriodStart cannot be before the challenge's start date.");
+            }
+
             var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note;
 
             var completion = new Completion
