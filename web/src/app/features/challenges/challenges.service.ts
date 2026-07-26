@@ -2,22 +2,8 @@ import { HttpClient, HttpErrorResponse, httpResource } from '@angular/common/htt
 import { inject, Service } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { isProblemDetails } from '../../shared/problem-details';
 import { Challenge, CreateChallengeRequest } from './challenge.model';
-
-export interface ValidationProblemDetails {
-  title: string;
-  status: number;
-  errors: Record<string, string[]>;
-}
-
-export function isValidationProblemDetails(value: unknown): value is ValidationProblemDetails {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'errors' in value &&
-    typeof (value as { errors: unknown }).errors === 'object'
-  );
-}
 
 @Service()
 export class ChallengesService {
@@ -33,7 +19,7 @@ export class ChallengesService {
       this.challenges.reload();
       return challenge;
     } catch (error) {
-      if (error instanceof HttpErrorResponse && isValidationProblemDetails(error.error)) {
+      if (error instanceof HttpErrorResponse && isProblemDetails(error.error)) {
         throw error.error;
       }
       throw error;

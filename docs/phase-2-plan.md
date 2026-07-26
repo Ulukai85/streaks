@@ -482,28 +482,103 @@ HTTP contract and the automated specs were. The human should open
 `http://localhost:4200/challenges` themselves before treating this stage as
 fully verified.
 
+**Post-Stage-8 revisions (same session, before Stage 9 started):** after
+reviewing against the Angular CLI MCP's best-practices guide (not consulted
+during the original planning — a since-corrected process gap, see
+`web/CLAUDE.md`'s Tooling section), `challenge-form.ts` was migrated from
+Reactive Forms to Signal Forms (`form()`/`FormField`/`FormRoot`/`submit()`);
+`ChallengesService` moved to `@Service()`; explicit `OnPush` was dropped from
+both components (default in v22+). The Signal Forms migration needed a small
+`toggle-group-field.ts` wrapper (`FormValueControl<T>`) since `hlm-toggle-group`
+only implements classic CVA — its item markup is rendered from an `options`
+input inside the wrapper's own template, not projected via `<ng-content>`,
+after an earlier attempt hit `NG0201` (a child directive's `inject()`-based
+parent lookup can't see across a content-projection boundary; see
+`docs/angular-conventions.md`). Test suites were also tightened: replaced
+ad hoc `Promise.resolve().then(...)` microtask helpers with `TestBed.tick()`
+(the documented, stable replacement for the deprecated `flushEffects()`),
+and replaced private-field-poking assertions with real DOM interaction
+(typing into inputs, clicking the actual toggle-group buttons) — which
+caught a real shipped accessibility bug along the way: the color swatch
+buttons' `aria-label` binding was silently overwritten by
+`BrnToggleGroupItem`'s own same-named input reflecting its unset default,
+fixed by binding to that input directly instead of forcing a raw
+`[attr.aria-label]`. Full suite green (8/8) after all of the above.
+
 ---
 
 ## Stage 9 — Angular: Dashboard feature (unblocked — Stage 7 is done)
 
-**Status: Not started**
+**Status: Done**
 
-1. `features/dashboard/dashboard.model.ts`, `dashboard.service.ts`
-   (`httpResource` for `GET /api/dashboard`), `dashboard-page.ts` — open
-   section (tick-off button per card) + collapsible "done this period"
-   section, empty state linking to `/challenges`.
-2. Tick-off action wired to `POST /api/challenges/{id}/completions`, reload
-   on success, surface RFC 7807 `detail` inline (not a generic toast).
-3. Streak badge — minimal, e.g. spartan `badge` with count. No charts
-   (heatmap is Phase 5).
-4. Make Dashboard the `''` root route; move `HealthStatus` to `/health`
-   (kept as a dev diagnostic). Plain `routerLink`s between the two — no
-   full nav component needed for a single-user app.
+Confirmed with the human before implementing: the "done this period" section
+uses spartan's `collapsible` component rather than a hand-rolled toggle;
+a persistent "Challenges verwalten" link stays on the dashboard regardless
+of empty/non-empty state (the original wording only mentioned an
+empty-state link); no retroactive-backfill UI in this stage — tick-off only
+ever completes what's currently shown (empty request body, server derives
+`PeriodStart` as "today"), with the §6.3 bound verified via a manual `curl`
+smoke test against the real dev DB rather than a UI control; the tick-off
+button disables itself per-item while that item's request is in flight.
+`Note` stayed off the UI entirely (confirmed v1 non-goal, PROJECT-BRIEF §2)
+even though the backend `CompleteChallengeRequest` accepts one.
 
-**Verify:** `ng test`; manual end-to-end pass with both `dotnet run` and
-`npm start` running: add daily/weekly/monthly challenges, tick each off,
-confirm dashboard grouping/urgency/collapse per §6.4, confirm retroactive
-bound enforcement is visible, confirm streak count is correct.
+- `features/dashboard/dashboard.model.ts` — `DashboardItem`/`DashboardResponse`/
+  `DashboardStreak`/`CompletionResponse` interfaces matching
+  `DashboardItemResponse`/`DashboardStreakResponse`/`CompletionResponse`
+  verified directly against the current backend source. Reuses `Cadence`,
+  `ChallengeColor`, `CADENCE_LABEL`, `COLOR_SWATCH_CLASS` from
+  `../challenges/challenge.model.ts` rather than re-declaring them.
+- `features/dashboard/dashboard.service.ts` — mirrors `ChallengesService`'s
+  shape exactly: `@Service()`, `httpResource` for the `GET /api/dashboard/`
+  read, `completeChallenge()` via `HttpClient` + `firstValueFrom` (never
+  `httpResource` for the mutation), `.reload()` on success, rethrows the
+  parsed problem-details body on error (`isProblemDetails` type guard —
+  `title`/`detail`, not the validation-specific `errors` dict shape).
+- `features/dashboard/dashboard-page.ts` — new root-route component. Renders
+  `open`/`doneThisPeriod` in the order the server returns them (both are
+  pre-sorted server-side — urgency then `SortOrder` for `open`, `SortOrder`
+  alone for `doneThisPeriod`; there's no `DaysRemaining`/`PeriodStart` on the
+  wire to re-derive urgency with anyway, so the client doesn't try). Each
+  card shows a streak `hlmBadge` (count = `streak.length`, `secondary`
+  variant when `!isAlive`). Per-item in-flight tracking uses a `Set<string>`
+  of challenge IDs so only the clicked card's button disables. The done
+  section is wrapped in `hlmCollapsible`/`hlmCollapsibleTrigger`/
+  `hlmCollapsibleContent`, collapsed by default — used directly in the
+  page's own template (not through a wrapper component), so the trigger/
+  content's `inject()`-based parent lookup resolves normally, avoiding the
+  `NG0201` class of bug noted in the Stage 8 addendum above.
+- Generated spartan `badge` and `collapsible` — verified neither added a new
+  npm dependency (checked `package.json`/`package-lock.json` diff after
+  each, same check that caught `select`'s `@ng-icons` dependency in Stage 8).
+- `app.routes.ts`: `DashboardPage` takes over `''`; `HealthStatus` moves to
+  `/health` and gained a `routerLink` back to `/` (also dropped its own
+  leftover explicit `OnPush`, same cleanup as the Stage 8 addendum).
+
+**Verify:** `ng build`/`ng lint` clean. `ng test` green (6 spec files, 13/13
+passing) — `dashboard.service.spec.ts` used `TestBed.tick()` from the start
+(no microtask-helper false start this time); `dashboard-page.spec.ts` drives
+real DOM interaction throughout (clicks the actual collapsible trigger and
+tick-off buttons, never pokes component internals), including a controlled-
+promise test proving the tick-off button disables mid-flight and re-enables
+after settling. Manual round-trip via `dotnet run` (real dev Postgres) +
+`npm start` with proxy (the `ng serve` process had to be restarted once —
+it was a leftover from the Stage 8 session and had stale path-alias
+resolution from before `badge`/`collapsible` existed, so the first rebuild
+after writing `dashboard-page.ts` failed to resolve `@spartan-ng/helm/badge`
+until restarted): created three throwaway daily/weekly/monthly challenges
+alongside the human's real pre-existing one, confirmed daily-cadence items
+always rank first in `open` regardless of creation order (urgency), ticked
+off the throwaway daily one and confirmed it moved to `doneThisPeriod` with
+`streak: {length: 1, isAlive: true}`, confirmed a second tick-off attempt
+returns `409 Conflict` with the exact `title`/`detail` the page's error
+path expects, then archived all three throwaways — the human's real
+challenge was never ticked off or otherwise touched, only read. As with
+Stage 8, no browser/screenshot tool was available this session, so the
+rendered UI (badge/collapsible styling, card layout) was not visually
+confirmed — only the HTTP contract and the automated specs were. The human
+should open `http://localhost:4200/` themselves before treating this stage
+as fully verified.
 
 ---
 

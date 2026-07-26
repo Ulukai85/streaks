@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
 import { Challenge } from './challenge.model';
 import { ChallengeList } from './challenge-list';
@@ -35,7 +36,7 @@ describe('ChallengeList', () => {
     const fake = fakeChallengesService([challenge]);
     await TestBed.configureTestingModule({
       imports: [ChallengeList],
-      providers: [{ provide: ChallengesService, useValue: fake }],
+      providers: [provideRouter([]), { provide: ChallengesService, useValue: fake }],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(ChallengeList);
@@ -48,7 +49,7 @@ describe('ChallengeList', () => {
     const fake = fakeChallengesService([challenge]);
     await TestBed.configureTestingModule({
       imports: [ChallengeList],
-      providers: [{ provide: ChallengesService, useValue: fake }],
+      providers: [provideRouter([]), { provide: ChallengesService, useValue: fake }],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(ChallengeList);

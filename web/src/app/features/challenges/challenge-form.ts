@@ -11,6 +11,7 @@ import {
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInputImports } from '@spartan-ng/helm/input';
+import { isProblemDetails } from '../../shared/problem-details';
 import {
   CADENCE_LABEL,
   CADENCES,
@@ -21,7 +22,7 @@ import {
   COLOR_SWATCH_CLASS,
   CreateChallengeRequest,
 } from './challenge.model';
-import { ChallengesService, isValidationProblemDetails } from './challenges.service';
+import { ChallengesService } from './challenges.service';
 import { ToggleGroupField, ToggleGroupOption } from './toggle-group-field';
 
 interface ChallengeFormModel {
@@ -154,12 +155,15 @@ export class ChallengeForm {
             this.model.set(emptyModel());
             return undefined;
           } catch (error) {
-            if (isValidationProblemDetails(error)) {
+            if (isProblemDetails(error) && error.errors) {
               return Object.entries(error.errors).map(([key, messages]) => ({
                 kind: 'server',
                 message: messages[0],
                 fieldTree: field[toCamelCase(key) as keyof typeof field] ?? field,
               }));
+            }
+            if (isProblemDetails(error)) {
+              return { kind: 'server', message: error.detail ?? error.title };
             }
             return {
               kind: 'network',

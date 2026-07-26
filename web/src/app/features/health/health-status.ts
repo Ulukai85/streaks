@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { httpResource } from '@angular/common/http';
+import { RouterLink } from '@angular/router';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { environment } from '../../../environments/environment';
@@ -11,10 +12,9 @@ interface HealthResponse {
 
 @Component({
   selector: 'streaks-health-status',
-  imports: [...HlmCardImports, ...HlmButtonImports],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink, ...HlmCardImports, ...HlmButtonImports],
   template: `
-    <main class="flex min-h-dvh items-center justify-center p-4">
+    <main class="flex min-h-dvh flex-col items-center justify-center gap-4 p-4">
       <section hlmCard class="w-full max-w-sm">
         <div hlmCardHeader>
           <h3 hlmCardTitle>Systemstatus</h3>
@@ -36,6 +36,7 @@ interface HealthResponse {
           <button hlmBtn (click)="health.reload()">Neu laden</button>
         </div>
       </section>
+      <a routerLink="/" class="text-primary text-sm underline">Zurück zum Dashboard</a>
     </main>
   `,
 })

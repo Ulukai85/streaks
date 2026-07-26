@@ -20,7 +20,9 @@
       "@spartan-ng/helm/input": ["./src/app/ui/input/src/index.ts"],
       "@spartan-ng/helm/field": ["./src/app/ui/field/src/index.ts"],
       "@spartan-ng/helm/label": ["./src/app/ui/label/src/index.ts"],
-      "@spartan-ng/helm/separator": ["./src/app/ui/separator/src/index.ts"]
+      "@spartan-ng/helm/separator": ["./src/app/ui/separator/src/index.ts"],
+      "@spartan-ng/helm/badge": ["./src/app/ui/badge/src/index.ts"],
+      "@spartan-ng/helm/collapsible": ["./src/app/ui/collapsible/src/index.ts"]
     }
   },
   "angularCompilerOptions": {

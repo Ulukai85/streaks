@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { HlmButtonImports } from '@spartan-ng/helm/button';
 import { HlmCardImports } from '@spartan-ng/helm/card';
 import { CADENCE_LABEL, COLOR_SWATCH_CLASS } from './challenge.model';
@@ -7,9 +8,14 @@ import { ChallengesService } from './challenges.service';
 
 @Component({
   selector: 'streaks-challenge-list',
-  imports: [ChallengeForm, ...HlmCardImports, ...HlmButtonImports],
+  imports: [RouterLink, ChallengeForm, ...HlmCardImports, ...HlmButtonImports],
   template: `
     <main class="mx-auto flex max-w-2xl flex-col gap-6 p-4">
+      <div class="flex items-center justify-between">
+        <h1 class="text-lg font-semibold">Challenges</h1>
+        <a routerLink="/" class="text-primary text-sm underline">Zum Dashboard</a>
+      </div>
+
       <section hlmCard>
         <div hlmCardHeader>
           <h3 hlmCardTitle>Neue Challenge</h3>
