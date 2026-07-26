@@ -165,7 +165,7 @@ stronger than the const-symbol mitigation alone.
 
 ## Stage 3 — HUMAN CHECKPOINT A: `PeriodStartFor`
 
-**Status: Not started**
+**Status: Done**
 
 **Hard stop.** Agent does not write the function, file, or tests. Confirm:
 - Signature per §7, using the `Cadence` enum from Stage 1.
@@ -352,24 +352,72 @@ suite green: 105/105.
 
 ## Stage 7 — Dashboard read endpoint
 
-**Status: Not started**
+**Status: Done**
 
-1. **Open/due + done-this-period grouping** (blocked on Checkpoint A only):
-   `GET /api/dashboard` — `Api/Features/Dashboard/DashboardEndpoints.cs` +
-   `DashboardResponse` (`Open: [...]`, `DoneThisPeriod: [...]`). Loads dev
-   user's non-archived, started challenges (`AsNoTracking()`), computes each
-   one's current `PeriodStart`, checks for a matching `Completion` to sort
-   open vs. done, computes days-remaining-in-period for urgency sort within
-   the open group (§6.4). Streak field stubbed as a placeholder (e.g. `null`)
-   until step 2 — this is the one deliberate placeholder, clearly temporary,
-   never asserted-correct in tests until step 2 wires in the real query.
-2. **Wire in real streak query** (unblocked — Checkpoint B is done): replace
-   the placeholder with real `StreakQuery` calls per challenge.
+Built as one unified implementation rather than the original two-step
+(placeholder-then-real-streak) split — that split only existed because
+Checkpoint B hadn't landed when this stage was originally planned; it had by
+the time this stage was implemented, so `StreakQuery` was wired in from the
+start. Confirmed with the human before implementing, along with three other
+decisions below.
 
-**Verify:** integration tests seeding challenges/completions directly via
-`AppDbContext`, asserting grouping/sorting (step 1, can be green before step
-2); a follow-up test after step 2 asserting the endpoint plumbs the streak
-query's result through correctly (not re-deriving the alive/dead rule itself).
+- `GET /api/dashboard/` — `Api/Features/Dashboard/DashboardEndpoints.cs` +
+  `DashboardResponse` (`Open: [...]`, `DoneThisPeriod: [...]`). Loads the dev
+  user's non-archived, started challenges (`AsNoTracking()`, `StartsOn <=
+  today`), computes each one's current period start per cadence, checks for
+  a matching `Completion` to split open vs. done, sorts `Open` by
+  days-remaining-in-period ascending (urgency, §6.4) then `SortOrder`, and
+  `DoneThisPeriod` by `SortOrder` alone (not specified in the brief —
+  confirmed this session, matches `GET /api/challenges/`'s existing default).
+- New `Api/Domain/PeriodUrgency.cs` (`DaysRemaining(DateOnly periodStart,
+  DateOnly today, Cadence cadence)`) — agent-owned pure calendar math, same
+  category as `PeriodOrdinal.cs` from Stage 5: no timezone/DST logic, not a
+  touch on the off-limits `PeriodStartFor`. Monthly's end-of-month is
+  computed via `DateOnly` chaining (`AddMonths(1).AddDays(-1)`), not
+  `DateTime.DaysInMonth`, to stay clear of the "no `DateTime`" hard rule
+  entirely rather than argue whether a static BCL call counts.
+- Avoids per-challenge completion-lookup queries: at most 3 distinct cadences
+  per request means at most 3 `PeriodCalculator` calls, then one batched
+  `Completions` query (`ChallengeId IN (...) AND PeriodStart IN (...)`)
+  matched in-memory per challenge via a `HashSet<(Guid, DateOnly)>`. The
+  per-challenge `StreakQuery.ForChallenge` call remains N separate calls —
+  that's the already-accepted Stage 6 pattern, out of scope to batch here.
+- Response DTO stays minimal (`Id, Name, Url, Cadence, Color, SortOrder,
+  Streak`) — no `PeriodStart`/`DaysRemaining` on the wire, since nothing in
+  Stage 8/9's UI plan displays either (confirmed this session; trivial to add
+  later if that changes). `Streak` is `DashboardStreakResponse`, a small
+  Dashboard-owned record mapped from `StreakResult` rather than serializing
+  `Api.Features.Streaks.StreakResult` directly — keeps each feature owning
+  its own response contract per `docs/aspnet-conventions.md` (confirmed this
+  session).
+- `archivedAtLocalDateOnly` is always `null` when `StreakQuery.ForChallenge`
+  is called from here — the `Where` clause already excludes archived
+  challenges, so a dashboard-loaded challenge is never archived. Accepted
+  fact, not a workaround: the parameter exists for a (currently nonexistent)
+  future archived view.
+
+**Verify:** `Api.Tests/Domain/PeriodUrgencyTests.cs` — pure C#, no database —
+covers daily (always `0`), weekly (Monday/mid-week/Sunday), and monthly
+(first day, last day, and a leap-year-vs-non-leap-year February pair proving
+`AddMonths(1).AddDays(-1)` is actually leap-aware) (10 cases).
+`Api.Tests/Features/Dashboard/DashboardEndpointsTests.cs` — Testcontainers,
+seeding `Challenge`/`Completion` directly via `AppDbContext` — covers empty
+groups, archived-exclusion, not-yet-started-exclusion, open/done grouping
+(including a weekly challenge completed only last period, still open this
+week), `DoneThisPeriod`'s `SortOrder` ordering, `Open`'s `SortOrder` tie-break
+for same-cadence items, cross-cadence urgency ordering (daily always ranks
+first), and two streak-wiring tests asserting the endpoint plumbs
+`StreakQuery`'s result through correctly rather than re-deriving the
+alive/dead rule (11 cases). No fake/controllable `TimeProvider` was added —
+every ordering test is designed to hold regardless of the real calendar date
+at run time (same-cadence ties, or a cadence whose urgency is always the
+global minimum), consistent with this codebase's existing convention of
+recomputing expected values from real `DateTimeOffset.UtcNow` rather than
+faking the clock. Full suite green: 127/127. Manual `dotnet run` + `curl`
+smoke test against the real dev DB confirmed grouping and streak wiring
+end-to-end (daily challenge ticked off → `doneThisPeriod` with `length: 1,
+isAlive: true`; untouched weekly challenge → `open` with a fresh `length: 0`
+streak), then cleaned up the throwaway rows.
 
 ---
 
@@ -396,19 +444,18 @@ devserver tools).
 
 ---
 
-## Stage 9 — Angular: Dashboard feature (blocked on Stage 7)
+## Stage 9 — Angular: Dashboard feature (unblocked — Stage 7 is done)
 
 **Status: Not started**
 
 1. `features/dashboard/dashboard.model.ts`, `dashboard.service.ts`
    (`httpResource` for `GET /api/dashboard`), `dashboard-page.ts` — open
    section (tick-off button per card) + collapsible "done this period"
-   section, empty state linking to `/challenges`. Can be built against
-   Stage 7's step-1 placeholder-streak shape without waiting on step 2.
+   section, empty state linking to `/challenges`.
 2. Tick-off action wired to `POST /api/challenges/{id}/completions`, reload
    on success, surface RFC 7807 `detail` inline (not a generic toast).
-3. Streak badge (blocked on Stage 7 step 2) — minimal, e.g. spartan `badge`
-   with count. No charts (heatmap is Phase 5).
+3. Streak badge — minimal, e.g. spartan `badge` with count. No charts
+   (heatmap is Phase 5).
 4. Make Dashboard the `''` root route; move `HealthStatus` to `/health`
    (kept as a dev diagnostic). Plain `routerLink`s between the two — no
    full nav component needed for a single-user app.

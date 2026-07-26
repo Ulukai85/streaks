@@ -1,6 +1,7 @@
 using Api.Data;
 using Api.Features.Challenges;
 using Api.Features.Completions;
+using Api.Features.Dashboard;
 using Api.Features.Health;
 using Api.Infrastructure;
 using FluentValidation;
@@ -34,5 +35,6 @@ app.UseStatusCodePages();
 app.MapHealthEndpoints();
 app.MapChallengeEndpoints();
 app.MapCompletionEndpoints();
+app.MapDashboardEndpoints();
 
 app.Run();
