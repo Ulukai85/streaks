@@ -228,24 +228,59 @@ versus the in-memory value from the initial write.
 
 ## Stage 5 — Completion tick-off endpoint
 
-**Status: Not started**
+**Status: Done**
 
-1. DTOs + validator (not blocked, can start alongside Stage 4):
-   `CompleteChallengeRequest` (`DateOnly? PeriodStart, string? Note` — omitted
-   means current period), `CompletionResponse`,
-   `CompleteChallengeRequestValidator` (shape only, e.g. note max length).
-2. `POST /api/challenges/{challengeId}/completions` (**hard-blocked on
-   Checkpoint A**): resolve current period via `PeriodCalculator`; if a
-   `PeriodStart` is given, validate it's within {current, current-1,
-   current-2} using an agent-written stepping-back helper (daily →
-   `AddDays`, weekly → `AddDays(-7/-14)` since `PeriodStart` is already the
-   Monday, monthly → `AddMonths(-1/-2)` since it's already the 1st) — else
-   400. Rely on the Stage 1 unique index to reject duplicate tick-offs
-   (Postgres unique-violation → mapped problem-details response).
+`POST /api/challenges/{challengeId}/completions`, vertical slice under
+`Api/Features/Completions/`.
 
-**Verify:** `dotnet test --filter Completions` — happy path, retroactive
-within/beyond bound, duplicate completion conflict (must exercise the real
-Postgres unique index per ADR 0003).
+- The bounds check does **not** use cadence-specific date-stepping
+  (`AddDays`/`AddMonths`), which would have reimplemented brief §8's period
+  math as a second, independent source of truth. Instead `Api/Domain/PeriodOrdinal.cs`
+  (`static int For(DateOnly periodStart, Cadence cadence)`) transcribes §8's
+  ordinal formula directly (daily = days since 1970-01-01, weekly = that / 7,
+  monthly = `year * 12 + month`), and the bounds check is one integer
+  comparison: `periodsAgo = PeriodOrdinal.For(current) - PeriodOrdinal.For(given)`,
+  valid iff `periodsAgo` is `0`, `1`, or `2`. This is a new agent-owned file
+  — it has zero timezone/DST logic and only operates on an already-resolved
+  `DateOnly` — not an edit to the human-owned `PeriodCalculator.cs`, and not
+  literally shared code with Stage 6 (the streak SQL is hand-written raw SQL
+  in a different execution context; it will encode the same §8 formula
+  directly).
+- Future `PeriodStart` values are rejected by the same check
+  (`periodsAgo < 0` → `400`), no separate special case.
+- A given `PeriodStart` that isn't the canonical start of its period (not a
+  Monday for weekly, not the 1st for monthly) is rejected as `400` before
+  the ordinal diff even runs — otherwise a misaligned date can land in a
+  neighboring integer-division bucket and pass/fail the bounds check for
+  the wrong reason.
+- Archived challenges reject new completions with `409 Conflict` (inferred
+  from §8's "archived challenges freeze their streak" — not stated
+  explicitly, confirmed this session).
+- Duplicate `(ChallengeId, PeriodStart)` → `409 Conflict`, mapped by a new
+  global `Api/Infrastructure/UniqueConstraintExceptionHandler.cs`
+  implementing the BCL `IExceptionHandler`, registered via
+  `AddExceptionHandler<T>()` ahead of `AddProblemDetails()`. Matches
+  `DbUpdateException` wrapping `Npgsql.PostgresException` with
+  `SqlState == PostgresErrorCodes.UniqueViolation` ("23505"); anything else
+  falls through to the pre-existing default 500/problem-details behavior.
+  First exception handler in the app — the pattern is reusable for any
+  future unique constraint without a per-endpoint catch block.
+- `CompletionResponse` carries `Id, ChallengeId, PeriodStart, CompletedAt,
+  Note` — enough for the dashboard to update optimistically without a
+  second round trip. `Note` max length 500 (not specified in the brief,
+  confirmed this session); blank `Note` persists as `null`, mirroring
+  Stage 4's `Url` handling.
+
+**Verify:** `dotnet test --filter "Completion|PeriodOrdinal"` green (24
+tests: `PeriodOrdinal` unit tests, validator unit tests, and integration
+tests covering happy path, in-bound/out-of-bound/future/misaligned
+`PeriodStart`, duplicate-completion `409`, archived-challenge `409`, and
+unknown-challenge-id `404` — asserting exact status codes throughout, not
+just non-200); full suite green (72/72). Manual `dotnet run` + `curl` smoke
+pass against the real dev DB confirmed the exception-handler wiring
+end-to-end (create → complete `201` → duplicate `409` → future date `400`
+→ unknown id `404` → archive then complete `409`), then cleaned up the
+throwaway rows.
 
 ---
 
