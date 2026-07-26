@@ -18,7 +18,7 @@ export interface ToggleGroupOption<T> {
           hlmToggleGroupItem
           type="button"
           [value]="option.value"
-          [attr.aria-label]="option.swatchClass ? option.label : null"
+          [aria-label]="option.swatchClass ? option.label : null"
         >
           @if (option.swatchClass) {
             <span class="size-4 rounded-full {{ option.swatchClass }}"></span>

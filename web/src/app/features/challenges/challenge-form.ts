@@ -13,6 +13,7 @@ import { HlmFieldImports } from '@spartan-ng/helm/field';
 import { HlmInputImports } from '@spartan-ng/helm/input';
 import {
   CADENCE_LABEL,
+  CADENCES,
   Cadence,
   CHALLENGE_COLORS,
   ChallengeColor,
@@ -107,9 +108,10 @@ function toCamelCase(key: string): string {
 export class ChallengeForm {
   private readonly challengesService = inject(ChallengesService);
 
-  protected readonly cadenceOptions: ToggleGroupOption<Cadence>[] = (
-    ['Daily', 'Weekly', 'Monthly'] as const
-  ).map((cadence) => ({ value: cadence, label: CADENCE_LABEL[cadence] }));
+  protected readonly cadenceOptions: ToggleGroupOption<Cadence>[] = CADENCES.map((cadence) => ({
+    value: cadence,
+    label: CADENCE_LABEL[cadence],
+  }));
 
   protected readonly colorOptions: ToggleGroupOption<ChallengeColor>[] = CHALLENGE_COLORS.map((color) => ({
     value: color,

@@ -55,6 +55,38 @@ Same root cause applies to any Brain component whose child directives use
 `injectXyz()`-style DI tokens to find a parent — check for that pattern
 before reaching for `<ng-content>` in a Signal Forms wrapper.
 
+## Flushing signals/resources in tests: `TestBed.tick()`, not `fakeAsync`/`tick()`
+
+A signal `resource()`/`httpResource()` issues its request from an `effect()`,
+which only runs on an actual change-detection flush — not merely by awaiting
+a microtask (`Promise.resolve().then(...)`). Use `TestBed.tick()`
+(`@angular/core/testing`) to flush it synchronously: it's the documented,
+stable replacement for the deprecated `TestBed.flushEffects()`, and it's what
+Angular's own `httpResource` testing guide uses. Pattern for a service/plain
+resource test:
+
+```ts
+TestBed.tick(); // runs the resource's effect, issuing the HTTP call
+httpMock.expectOne(url).flush(data);
+// only if a value read afterward needs the flushed data propagated first:
+await TestBed.inject(ApplicationRef).whenStable();
+```
+
+For a `ComponentFixture`, `fixture.detectChanges()` plays the same role
+(flushes effects scoped to that component) and `await fixture.whenStable()`
+is the propagation-wait equivalent — reach for those in component specs
+instead of calling `TestBed.tick()` directly. After a mutation that calls
+`.reload()` (e.g. `create()`/`archive()` in `ChallengesService`), the reload
+is itself effect-driven, so flush the mutation's response, then
+`fixture.detectChanges()` (or `TestBed.tick()`) again before expecting the
+follow-up request — a single `await ... .whenStable()` alone isn't
+guaranteed to run an effect that hasn't been scheduled yet.
+
+**Do not reach for `fakeAsync`/`tick()`** from `@angular/core/testing` — the
+classic zone.js-based async-testing utilities. They're explicitly documented
+as incompatible with the Vitest test runner, which is what this project uses
+(`@angular/build:unit-test`).
+
 ## Test real interaction for custom form controls, not just model state
 
 A test that only calls `formModel.set(...)` and asserts on the resulting

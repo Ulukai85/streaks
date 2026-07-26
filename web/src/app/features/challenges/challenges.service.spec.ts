@@ -1,19 +1,12 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Challenge, CreateChallengeRequest } from './challenge.model';
 import { ChallengesService } from './challenges.service';
 
-async function settle(appRef: ApplicationRef): Promise<void> {
-  await Promise.resolve().then(() => Promise.resolve());
-  appRef.tick();
-}
-
 describe('ChallengesService', () => {
   let service: ChallengesService;
   let httpMock: HttpTestingController;
-  let appRef: ApplicationRef;
 
   const challenge: Challenge = {
     id: '11111111-1111-1111-1111-111111111111',
@@ -27,14 +20,12 @@ describe('ChallengesService', () => {
     sortOrder: 0,
   };
 
-  beforeEach(async () => {
+  beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(ChallengesService);
     httpMock = TestBed.inject(HttpTestingController);
-    appRef = TestBed.inject(ApplicationRef);
-    await settle(appRef);
   });
 
   afterEach(() => {
@@ -42,6 +33,7 @@ describe('ChallengesService', () => {
   });
 
   it('create() posts the request body and reloads the list on success', async () => {
+    TestBed.tick();
     httpMock.expectOne('/api/challenges/').flush([]);
 
     const request: CreateChallengeRequest = {
@@ -59,12 +51,13 @@ describe('ChallengesService', () => {
     postReq.flush(challenge);
 
     await createPromise;
-    await settle(appRef);
 
+    TestBed.tick();
     httpMock.expectOne('/api/challenges/').flush([challenge]);
   });
 
   it('create() surfaces a validation-problem response without an unhandled rejection', async () => {
+    TestBed.tick();
     httpMock.expectOne('/api/challenges/').flush([]);
 
     const request: CreateChallengeRequest = {
@@ -89,6 +82,7 @@ describe('ChallengesService', () => {
   });
 
   it('archive() posts to the archive URL and reloads the list on success', async () => {
+    TestBed.tick();
     httpMock.expectOne('/api/challenges/').flush([challenge]);
 
     const archivePromise = service.archive(challenge.id);
@@ -98,8 +92,8 @@ describe('ChallengesService', () => {
     archiveReq.flush({ ...challenge, archivedAt: '2026-07-26T00:00:00Z' });
 
     await archivePromise;
-    await settle(appRef);
 
+    TestBed.tick();
     httpMock.expectOne('/api/challenges/').flush([]);
   });
 });

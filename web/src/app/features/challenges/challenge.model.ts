@@ -1,4 +1,6 @@
-export type Cadence = 'Daily' | 'Weekly' | 'Monthly';
+export const CADENCES = ['Daily', 'Weekly', 'Monthly'] as const;
+
+export type Cadence = (typeof CADENCES)[number];
 
 export const CHALLENGE_COLORS = [
   'red',
