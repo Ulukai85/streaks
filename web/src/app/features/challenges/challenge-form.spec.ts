@@ -83,5 +83,8 @@ describe('ChallengeForm', () => {
     await fixture.whenStable();
 
     expect(nameInput.value).toBe('');
+    expect(fixture.nativeElement.textContent).not.toContain('Pflichtfeld.');
+    expect(fixture.nativeElement.textContent).not.toContain('Bitte einen Rhythmus wählen.');
+    expect(fixture.nativeElement.textContent).not.toContain('Bitte eine Farbe wählen.');
   });
 });

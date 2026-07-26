@@ -37,7 +37,7 @@ public static class ChallengeEndpoints
                 Url = url,
                 Cadence = cadence,
                 TargetCount = 1,
-                StartsOn = PeriodCalculator.PeriodStartFor(timeProvider.GetUtcNow(), user.TimeZoneId, Cadence.Daily),
+                StartsOn = PeriodCalculator.PeriodStartFor(timeProvider.GetUtcNow(), user.TimeZoneId, cadence),
                 Color = request.Color,
                 SortOrder = request.SortOrder ?? (maxSortOrder is null ? 0 : maxSortOrder.Value + 1),
             };

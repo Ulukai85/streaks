@@ -584,13 +584,78 @@ as fully verified.
 
 ## Stage 10 — Phase 2 close-out verification
 
-**Status: Not started**
+**Status: Done**
 
-- `dotnet test` (full suite) green against real Postgres via Testcontainers.
-- `ng test` green.
-- Manual walkthrough covering all of §1's v1 scope statement end-to-end.
-- Explicitly out of scope: auth (Phase 3), Compose/Caddy/CI (Phase 4),
-  heatmap/OTel/PWA/backups (Phase 5), and all of §2's non-goals.
+The manual end-to-end walkthrough (real usage, not scripted test data) found
+three real bugs that the full automated suite had missed — exactly what this
+stage's manual pass exists to catch. All three are fixed, each with a
+regression test added afterward (one written and confirmed failing against
+the buggy code *before* the fix, per the human's explicit request, to prove
+the test actually exercises the bug rather than passing vacuously):
+
+1. **`Challenge.StartsOn` used `Cadence.Daily` unconditionally at creation**
+   (`ChallengeEndpoints.cs`), instead of the challenge's own cadence. Daily
+   challenges never exposed this (today's date already *is* the correct
+   period start for Daily), which is also why it slipped past 127 passing
+   backend tests — the only existing `StartsOn` assertion used a Daily
+   challenge, and other tests set `StartsOn` by hand via `AppDbContext`,
+   bypassing the buggy computation entirely. Manifested as two different
+   symptoms depending on cadence: a Weekly challenge's completion was
+   rejected outright with "PeriodStart cannot be before the challenge's
+   start date" (the bound check compares period *ordinals*, and weekly
+   ordinals — `daysSinceEpoch / 7` — don't align a raw non-Monday date with
+   the canonical Monday of the same week, since epoch (1970-01-01) is a
+   Thursday); a Monthly challenge's completion *succeeded* but its streak
+   badge stayed at 0 (monthly ordinals are `year*12+month`, so the bound
+   check couldn't tell the raw day-of-month apart from the 1st — but the
+   streak query's `WHERE PeriodStart >= StartsOn` filter is a raw date
+   comparison, which silently excluded the correctly-recorded completion).
+   Fixed by passing the parsed `cadence` instead of the hardcoded
+   `Cadence.Daily`. Two new regression tests
+   (`Post_Computes_StartsOn_Using_Weekly_Cadence`,
+   `Post_Computes_StartsOn_Using_Monthly_Cadence`) confirmed failing against
+   the original code before the fix landed. The human's own two real
+   pre-existing Weekly/Monthly challenges still had the wrong `StartsOn`
+   stored — deliberately **not** corrected by the agent (the human's explicit
+   instruction); the dev database was otherwise left untouched throughout
+   this stage.
+2. **Dashboard showed stale data after navigating away and back.**
+   `DashboardService` is a root singleton whose `httpResource` fetches
+   exactly once, the first time it's ever injected; creating a challenge via
+   `ChallengesService.create()` reloads only its own resource, with no
+   mechanism to invalidate a sibling feature's cached one. Fixed by calling
+   `dashboardService.dashboard.reload()` in `DashboardPage`'s constructor, so
+   every navigation to `/` re-fetches — chosen over scoping `DashboardService`
+   to the component (`@Service({autoProvided:false})`, which Angular's own
+   docs suggest for this exact case) to avoid the DI-scope change breaking
+   the existing fake-service tests; a new spec asserts `reload()` is called
+   on page creation.
+3. **Challenge-creation form showed every field's error text immediately
+   after a successful submit**, even though the form correctly reset to
+   empty. Signal Forms' `submit()` always marks interactive fields `touched`
+   before validating, success or not; the form only reset the model
+   *value* (`this.model.set(emptyModel())`), leaving `touched` set on the
+   now-empty required fields. Fixed with `field().reset(emptyModel())` —
+   `FieldState.reset(value)` clears touched/dirty state and updates the
+   model value in one call, matching Angular's own documented "reset a form
+   after successful submission" pattern. Strengthened the existing
+   `challenge-form.spec.ts` success-path test to assert no error text is
+   present after reset, and confirmed it fails without the fix.
+
+**Verify:** `dotnet test` — 129/129 (127 + the 2 new `StartsOn` regression
+tests) against real Postgres via Testcontainers. `ng test` — 14/14, `ng
+lint`/`ng build` clean. Manual walkthrough by the human covering all of §1's
+v1 scope statement end-to-end (add a challenge of each cadence, see the
+dashboard group/order them, tick off, see the streak, archive) — the three
+bugs above were found during this pass and are now fixed and re-verified.
+Explicitly out of scope and untouched: auth (Phase 3), Compose/Caddy/CI
+(Phase 4), heatmap/OTel/PWA/backups (Phase 5), and all of §2's non-goals — a
+scan of everything built in Phase 2 confirms none crept in.
+
+**Phase 2 is complete.** All of PROJECT-BRIEF §1's v1 scope statement — add a
+challenge, see today's dashboard, tick it off, see the streak — works
+end-to-end without auth, matching the phase's own charter (§11: Phase 3 is
+auth-only, Phase 4 is deployment-only, so Phase 2 had to stand on its own).
 
 ---
 

@@ -38,6 +38,40 @@ public class ChallengeEndpointsTests(PostgresFixture postgres, ApiFactory factor
     }
 
     [Fact]
+    public async Task Post_Computes_StartsOn_Using_Weekly_Cadence()
+    {
+        await using var db = CreateDbContext();
+        var user = await db.Users.AsNoTracking().SingleAsync();
+
+        var request = new CreateChallengeRequest("Weekly run", null, "Weekly", "blue", null);
+
+        var response = await Client.PostAsJsonAsync("/api/challenges/", request);
+
+        var body = await response.Content.ReadFromJsonAsync<ChallengeResponse>();
+        body.Should().NotBeNull();
+
+        var expectedStartsOn = PeriodCalculator.PeriodStartFor(DateTimeOffset.UtcNow, user.TimeZoneId, Cadence.Weekly);
+        body!.StartsOn.Should().Be(expectedStartsOn);
+    }
+
+    [Fact]
+    public async Task Post_Computes_StartsOn_Using_Monthly_Cadence()
+    {
+        await using var db = CreateDbContext();
+        var user = await db.Users.AsNoTracking().SingleAsync();
+
+        var request = new CreateChallengeRequest("Monthly chore", null, "Monthly", "blue", null);
+
+        var response = await Client.PostAsJsonAsync("/api/challenges/", request);
+
+        var body = await response.Content.ReadFromJsonAsync<ChallengeResponse>();
+        body.Should().NotBeNull();
+
+        var expectedStartsOn = PeriodCalculator.PeriodStartFor(DateTimeOffset.UtcNow, user.TimeZoneId, Cadence.Monthly);
+        body!.StartsOn.Should().Be(expectedStartsOn);
+    }
+
+    [Fact]
     public async Task Post_Appends_SortOrder_When_Omitted()
     {
         var first = await Client.PostAsJsonAsync("/api/challenges/", new CreateChallengeRequest("First", null, "Daily", "blue", null));

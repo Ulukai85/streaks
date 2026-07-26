@@ -152,7 +152,7 @@ export class ChallengeForm {
 
           try {
             await this.challengesService.create(request);
-            this.model.set(emptyModel());
+            field().reset(emptyModel());
             return undefined;
           } catch (error) {
             if (isProblemDetails(error) && error.errors) {

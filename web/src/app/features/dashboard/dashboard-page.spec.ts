@@ -35,6 +35,7 @@ describe('DashboardPage', () => {
         error: () => undefined,
         hasValue: () => true,
         value,
+        reload: vi.fn(),
       },
       completeChallenge,
     };
@@ -60,6 +61,13 @@ describe('DashboardPage', () => {
     }
     return button;
   }
+
+  it('reloads the dashboard resource on creation, so revisiting the page shows fresh data', async () => {
+    const fake = fakeDashboardService({ open: [openItem], doneThisPeriod: [] });
+    await setup(fake);
+
+    expect(fake.dashboard.reload).toHaveBeenCalled();
+  });
 
   it('renders open and done items and toggles the done section', async () => {
     const fake = fakeDashboardService({ open: [openItem], doneThisPeriod: [doneItem] });

@@ -125,6 +125,13 @@ export class DashboardPage {
   private readonly submitting = signal<ReadonlySet<string>>(new Set());
   private readonly itemErrors = signal<ReadonlyMap<string, string>>(new Map());
 
+  constructor() {
+    // DashboardService is a root singleton whose httpResource only fetches once,
+    // the first time it's ever injected — reload here so navigating back to '/'
+    // (e.g. after creating a challenge on /challenges) always shows fresh data.
+    this.dashboardService.dashboard.reload();
+  }
+
   protected isSubmitting = (id: string): boolean => this.submitting().has(id);
   protected errorMessage = (id: string): string | null => this.itemErrors().get(id) ?? null;
 
