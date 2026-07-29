@@ -10,7 +10,7 @@ public static class ChallengeEndpoints
 {
     public static void MapChallengeEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/challenges");
+        var group = app.MapGroup("/api/challenges").RequireAuthorization();
 
         group.MapPost("/", async (
             CreateChallengeRequest request,

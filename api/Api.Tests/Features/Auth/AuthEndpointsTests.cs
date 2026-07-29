@@ -11,6 +11,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Api.Tests.Features.Auth;
 
+// Every test here uses its own anonymous client (CreateAnonymousClient()), not the inherited
+// Client - IntegrationTestBase.InitializeAsync now logs Client in for real against the shared
+// seeded dev user, which would collide with the throwaway users/cookies these tests manage
+// themselves (Client's own refresh cookie would otherwise satisfy e.g.
+// Refresh_Returns_401_When_Cookie_Missing).
 public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : IntegrationTestBase(postgres, factory)
 {
     [Fact]
@@ -19,7 +24,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, string password) = await CreateTestUserAsync();
         try
         {
-            var response = await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
+            var client = CreateAnonymousClient();
+            var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
 
             response.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -49,7 +55,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, _) = await CreateTestUserAsync();
         try
         {
-            var response = await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "definitely-wrong"));
+            var client = CreateAnonymousClient();
+            var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "definitely-wrong"));
 
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -64,7 +71,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
     [Fact]
     public async Task Login_Returns_401_For_Unknown_Username_With_Same_Generic_Message()
     {
-        var response = await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest($"nobody-{Guid.NewGuid():N}", "whatever"));
+        var client = CreateAnonymousClient();
+        var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest($"nobody-{Guid.NewGuid():N}", "whatever"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
@@ -77,9 +85,10 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, string password) = await CreateTestUserAsync();
         try
         {
-            await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
+            var client = CreateAnonymousClient();
+            await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
 
-            var refreshResponse = await Client.PostAsync("/api/auth/refresh", null);
+            var refreshResponse = await client.PostAsync("/api/auth/refresh", null);
 
             refreshResponse.StatusCode.Should().Be(HttpStatusCode.OK);
             var body = await refreshResponse.Content.ReadFromJsonAsync<LoginResponse>();
@@ -102,7 +111,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
     [Fact]
     public async Task Refresh_Returns_401_When_Cookie_Missing()
     {
-        var response = await Client.PostAsync("/api/auth/refresh", null);
+        var client = CreateAnonymousClient();
+        var response = await client.PostAsync("/api/auth/refresh", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -113,17 +123,18 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, string password) = await CreateTestUserAsync();
         try
         {
-            var loginResponse = await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
+            var client = CreateAnonymousClient();
+            var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
             var firstRawToken = ExtractRawCookieValue(loginResponse);
 
             // Rotate once via the client - its cookie jar now holds the second-generation token.
-            var firstRefresh = await Client.PostAsync("/api/auth/refresh", null);
+            var firstRefresh = await client.PostAsync("/api/auth/refresh", null);
             firstRefresh.StatusCode.Should().Be(HttpStatusCode.OK);
 
             // Replay the original (now-revoked) token directly - this is the reuse/compromise
-            // signal RefreshTokenIssuer.RotateAsync exists to catch. Uses a separate client with
-            // its own cookie handling disabled: Client's automatic cookie jar would silently
-            // overwrite this manually-set header with its own (rotated) stored cookie otherwise.
+            // signal RefreshTokenIssuer.RotateAsync exists to catch. Uses yet another client with
+            // its own cookie handling disabled: an auto-cookie client would silently overwrite
+            // this manually-set header with its own (rotated) stored cookie otherwise.
             using var rawClient = Factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
             using var replayRequest = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
             replayRequest.Headers.Add("Cookie", $"refresh_token={firstRawToken}");
@@ -132,7 +143,7 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
 
             // The whole family is now revoked - even the second-generation token still sitting
             // in the client's own cookie jar must be rejected too.
-            var secondRefresh = await Client.PostAsync("/api/auth/refresh", null);
+            var secondRefresh = await client.PostAsync("/api/auth/refresh", null);
             secondRefresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
             await using var db = CreateDbContext();
@@ -152,7 +163,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, string password) = await CreateTestUserAsync();
         try
         {
-            await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
+            var client = CreateAnonymousClient();
+            await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
 
             await using (var db = CreateDbContext())
             {
@@ -161,7 +173,7 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
                 await db.SaveChangesAsync();
             }
 
-            var response = await Client.PostAsync("/api/auth/refresh", null);
+            var response = await client.PostAsync("/api/auth/refresh", null);
 
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         }
@@ -177,12 +189,13 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         (Guid userId, string username, string password) = await CreateTestUserAsync();
         try
         {
-            await Client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
+            var client = CreateAnonymousClient();
+            await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
 
-            var logoutResponse = await Client.PostAsync("/api/auth/logout", null);
+            var logoutResponse = await client.PostAsync("/api/auth/logout", null);
             logoutResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-            var refreshResponse = await Client.PostAsync("/api/auth/refresh", null);
+            var refreshResponse = await client.PostAsync("/api/auth/refresh", null);
             refreshResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
             await using var db = CreateDbContext();
@@ -198,9 +211,22 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
     [Fact]
     public async Task Logout_Is_Not_An_Error_When_No_Cookie_Present()
     {
-        var response = await Client.PostAsync("/api/auth/logout", null);
+        var client = CreateAnonymousClient();
+        var response = await client.PostAsync("/api/auth/logout", null);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Protected_Endpoint_Requires_Authentication()
+    {
+        var anonymousResponse = await CreateAnonymousClient().GetAsync("/api/challenges/");
+        anonymousResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Client is already authenticated against the seeded dev user - see
+        // IntegrationTestBase.InitializeAsync.
+        var authenticatedResponse = await Client.GetAsync("/api/challenges/");
+        authenticatedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private async Task<(Guid UserId, string Username, string Password)> CreateTestUserAsync()

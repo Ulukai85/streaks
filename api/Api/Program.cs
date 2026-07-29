@@ -21,9 +21,7 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddAppAuthentication();
 
-// Still the Phase 2 hardcoded user - swapped for HttpCurrentUserProvider in Stage 3, once
-// there are endpoints to authenticate against.
-builder.Services.AddScoped<ICurrentUserProvider, DevCurrentUserProvider>();
+builder.Services.AddScoped<ICurrentUserProvider, HttpCurrentUserProvider>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IValidator<CreateChallengeRequest>, CreateChallengeRequestValidator>();
 builder.Services.AddScoped<IValidator<CompleteChallengeRequest>, CompleteChallengeRequestValidator>();

@@ -10,7 +10,7 @@ public static class CompletionEndpoints
 {
     public static void MapCompletionEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/api/challenges");
+        var group = app.MapGroup("/api/challenges").RequireAuthorization();
 
         group.MapPost("/{challengeId:guid}/completions", async Task<Results<Created<CompletionResponse>, NotFound, ProblemHttpResult>> (
             Guid challengeId,

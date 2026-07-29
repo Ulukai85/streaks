@@ -299,7 +299,71 @@ token.
 
 ## Stage 3 — Protect existing endpoints, replace `DevCurrentUserProvider`, real seed
 
-**Status: Not started**
+**Status: Done**
+
+Deviations from the plan as written:
+
+- **`DatabaseInitializer`'s credential-resolution logic was pulled out into a
+  separate public `ResolveSeedCredentials(IConfiguration, IHostEnvironment)`**,
+  not inlined in `MigrateAndSeedAsync`. Reason: the plan's own required test
+  ("`DatabaseInitializer` throws when Production-like config is missing the
+  env var") can't be an integration test against the shared `PostgresFixture`
+  — every integration test relies on `Users` already having exactly one row
+  by the time it runs (`PostgresFixture.ResetDatabaseAsync`'s invariant), so
+  `MigrateAndSeedAsync`'s `if (await db.Users.AnyAsync()) return;` guard would
+  always skip seeding and the throw would never fire. Extracting the pure
+  decision into its own method makes it a fast, deterministic unit test
+  (`DatabaseInitializerTests.cs`, three cases: throws in Production with no
+  password, falls back to `DevSeed` defaults in Development, uses configured
+  values when present even outside Development) with no database involved.
+- **`ApiFactory` stays on `UseEnvironment("Development")`**, not `"Testing"`.
+  Decision #11 says to lower the password-hasher cost "specifically under the
+  Testing environment" — read literally this could mean switching the test
+  host's environment name to `"Testing"`. That would have broken every
+  cookie-dependent auth test: `AuthEndpoints.SetRefreshCookie` sets
+  `Secure = !env.IsDevelopment()`, and a `Secure` cookie is never attached by
+  the client to a plain-`http://` `TestServer` request regardless of whether
+  the connection is "really" secure — so refresh/logout would silently stop
+  receiving the cookie. Instead the password-hasher override is registered
+  directly in `ApiFactory.ConfigureTestServices` via
+  `services.Configure<PasswordHasherOptions>(o => o.IterationCount = 1)`,
+  which only ever applies inside the test host's own DI container regardless
+  of the environment name — same effect (fast hashing, test-only, Production
+  untouched), without the Secure-cookie regression. Staying on `Development`
+  also means the seed-credential fallback (`DevSeed.DefaultUsername`/
+  `DefaultPassword`) applies to the test host automatically via
+  `ResolveSeedCredentials`'s existing `IsDevelopment()` branch — no separate
+  `SEED_USER_NAME`/`SEED_USER_PASSWORD` test configuration needed.
+- **`DevSeed.DefaultUsername`/`DefaultPassword` are `public`**, not
+  `internal` — `IntegrationTestBase` (a different assembly) needs them to log
+  in. They're a source-controlled Development-only convenience value already
+  visible in the repo either way, never used outside `IsDevelopment()`, so
+  the extra visibility costs nothing real.
+- **`AuthEndpointsTests` was rewritten to use `CreateAnonymousClient()`**
+  instead of the inherited `Client` for every test body. Once
+  `IntegrationTestBase.InitializeAsync` started logging `Client` in for real
+  against the shared seeded user, `Client` already carries a live refresh
+  cookie before any `AuthEndpointsTests` test body runs — which broke
+  `Refresh_Returns_401_When_Cookie_Missing` (it started returning 200,
+  refreshing the shared session instead of hitting the missing-cookie path).
+  This is exactly what the plan's own `CreateAnonymousClient()` instruction
+  is for; Stage 2's tests just hadn't needed it yet.
+- Manual verification used a **temporary in-process patch** to backfill a
+  password onto the already-existing local dev user (`UserManager.AddPasswordAsync`),
+  reverted immediately after, rather than deleting and reseeding — the local
+  dev Postgres already had real personal challenge data (Wordle, "Rasen
+  mähen", a running log) attached to that user's `Id` via `Challenges.UserId`,
+  which a delete-and-reseed would have orphaned/lost.
+
+**Verify:** all done — `dotnet test` full suite green (142/142: 138 prior +
+1 new protected-endpoint smoke test in `AuthEndpointsTests` + 3 new
+`DatabaseInitializerTests`), every pre-existing Challenges/Completions/
+Dashboard test now passing through a real `/api/auth/login` call made by
+`IntegrationTestBase.InitializeAsync`. Manual `dotnet run` + `curl` against
+the real local dev Postgres confirmed `/api/health` still 200s with zero
+credentials, `/api/challenges/` 401s with none, and logging in as `dev` then
+calling `/api/challenges/` with the bearer token returns the pre-existing
+real challenge data untouched.
 
 - New `api/Api/Infrastructure/HttpCurrentUserProvider.cs` — primary
   constructor, reads `ClaimTypes.NameIdentifier` off
