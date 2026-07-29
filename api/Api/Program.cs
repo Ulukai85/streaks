@@ -1,4 +1,5 @@
 using Api.Data;
+using Api.Features.Auth;
 using Api.Features.Challenges;
 using Api.Features.Completions;
 using Api.Features.Dashboard;
@@ -26,6 +27,8 @@ builder.Services.AddScoped<ICurrentUserProvider, DevCurrentUserProvider>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IValidator<CreateChallengeRequest>, CreateChallengeRequestValidator>();
 builder.Services.AddScoped<IValidator<CompleteChallengeRequest>, CompleteChallengeRequestValidator>();
+builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
+builder.Services.AddScoped<RefreshTokenIssuer>();
 
 var app = builder.Build();
 
@@ -40,6 +43,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthEndpoints();
+app.MapAuthEndpoints();
 app.MapChallengeEndpoints();
 app.MapCompletionEndpoints();
 app.MapDashboardEndpoints();

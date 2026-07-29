@@ -11,6 +11,10 @@ public abstract class IntegrationTestBase(PostgresFixture postgres, ApiFactory f
 {
     protected HttpClient Client { get; } = factory.CreateClient();
 
+    // Exposed so a test can resolve a scoped service (e.g. UserManager<User>) directly
+    // against the same DI container the HTTP pipeline runs against.
+    protected ApiFactory Factory { get; } = factory;
+
     // xUnit constructs a fresh test-class instance per [Fact], so this resets the DB before
     // every test with no per-test boilerplate.
     public Task InitializeAsync() => postgres.ResetDatabaseAsync();

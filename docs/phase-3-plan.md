@@ -182,7 +182,52 @@ green (nothing yet depends on auth).
 
 ## Stage 2 — `Features/Auth/` slice (login, refresh, logout)
 
-**Status: Not started**
+**Status: Done**
+
+Deviations from the plan as written:
+
+- The access token is minted by hand-building an `AuthenticationTicket` (via
+  `SignInManager.CreateUserPrincipalAsync` + `BearerTokenOptions.BearerTokenProtector.Protect`)
+  rather than through `Context.SignInAsync`/`TypedResults.SignIn` — deliberate,
+  not a shortcut: `SignInAsync` routes through `BearerTokenHandler.HandleSignInAsync`,
+  which writes the framework's own `AccessTokenResponse` body (including a
+  `refresh_token` field) directly to the HTTP response, which is exactly the
+  shape ADR 0008 rejects. The ticket is built to match
+  `BearerTokenHandler.CreateBearerTicket` exactly (verified against
+  `dotnet/aspnetcore`'s actual source, not from memory) — same
+  `$"{scheme}:AccessToken"` ticket-scheme string, same `ExpiresUtc` property —
+  so the framework's own `BearerTokenHandler.HandleAuthenticateAsync` can
+  unprotect and validate what we mint here with no special-casing later.
+- `AuthEndpointsTests` creates and tears down its own `User` rows via
+  `UserManager<User>` (helper `CreateTestUserAsync`/`DeleteTestUserAsync`)
+  rather than depending on the global seeded dev user having a password —
+  that wiring is Stage 3's job (`DevSeed`/`DatabaseInitializer`,
+  "production account creation"). Teardown deletes `RefreshTokens` before the
+  `User` row (the FK is `Restrict`), since `PostgresFixture.ResetDatabaseAsync`
+  asserts exactly one seeded user survives every reset.
+- `IntegrationTestBase` gained one line — `protected ApiFactory Factory { get; }`
+  — so tests can resolve `UserManager<User>` from the same DI container the
+  HTTP pipeline runs against. Everything else in `IntegrationTestBase`/
+  `ApiFactory` is untouched; the "every test logs in for real" rewiring is
+  still Stage 3's.
+- One test-writing gotcha worth flagging for later auth tests: `WebApplicationFactory`'s
+  default client (`HandleCookies = true`) silently overwrites a manually-set
+  `Cookie` request header with its own stored cookie. The reuse-detection test
+  (replaying an already-rotated token) needed a second client built with
+  `new WebApplicationFactoryClientOptions { HandleCookies = false }` to get a
+  request that actually carries the stale cookie.
+
+**Verify:** all done — `dotnet build` clean under `TreatWarningsAsErrors`;
+`dotnet test --filter Auth` green (9 tests: login success/wrong-password/
+unknown-username all generic 401, refresh rotates and revokes the prior row,
+missing cookie, reuse of an already-rotated token 401s **and** revokes the
+whole family — confirmed a second rotation-generation token also then fails,
+expired row 401s, logout 204 + immediately-following refresh 401s, logout
+with no cookie present still 204s); full suite 138/138. Manual `dotnet run` +
+`curl` smoke pass (against a throwaway seeded user, removed afterward)
+confirmed the `Set-Cookie` is `HttpOnly; SameSite=Strict; Path=/api/auth`,
+the login/refresh response bodies contain only `accessToken`/`expiresAt`, and
+logout's `Set-Cookie` expires the cookie (`Thu, 01 Jan 1970`).
 
 Per decision #9: the refresh token is entirely hand-rolled (table-backed),
 no spike on internal Identity protectors needed for it. The access token
