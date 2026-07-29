@@ -24,8 +24,25 @@ folders, when a service class is warranted).
   rest of ASP.NET Core Identity ship in the shared framework — a
   `Microsoft.NET.Sdk.Web` project like `Api.csproj` references it implicitly,
   so deriving `User : IdentityUser<Guid>` (ADR 0007) did not need a new
-  package. Only `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (stores,
-  `IdentityDbContext`) would count as new — not needed yet, Phase 3's call.
+  package. `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (the EF user
+  store) *is* a real package and was added in Phase 3 Stage 1 under ADR 0009.
+- **`AppDbContext` is a plain `DbContext`, not `IdentityDbContext`** (ADR
+  0009). The three Identity entities (`IdentityUserClaim<Guid>`,
+  `IdentityUserLogin<Guid>`, `IdentityUserToken<Guid>` → tables
+  `UserClaims`/`UserLogins`/`UserTokens`) are configured inline in
+  `OnModelCreating`, not as `IEntityTypeConfiguration<T>` files — those are
+  for domain entities. The three tables are unused by the auth flow and
+  should stay empty; they exist only because `UserOnlyStore`'s constructor
+  requires them in the model. Because the context isn't an
+  `IdentityDbContext`, **nothing else applies Identity's own column
+  configuration** — `UserConfiguration` has to pin the `varchar(256)`
+  lengths, the `ConcurrencyStamp` concurrency token, and the unique
+  `NormalizedUserName` index by hand.
+- **Refresh tokens are hand-rolled** (`Api/Domain/RefreshToken.cs` +
+  `RefreshTokens` table), not Identity's `RefreshTokenProtector` and not
+  `UserTokens` — that's what buys per-device logout and reuse detection.
+  The **access** token does go through Identity's
+  `BearerTokenOptions.BearerTokenProtector` via `AddBearerToken`.
 - Integration tests use **Testcontainers with real PostgreSQL** — never
   in-memory, never SQLite (see ADR 0003). If `dotnet test` fails pulling an
   image with a Docker "Unauthorized" error, see `docs/troubleshooting.md` —

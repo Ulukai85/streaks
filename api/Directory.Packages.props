@@ -5,6 +5,10 @@
   <ItemGroup>
     <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="FluentValidation" Version="12.1.1" />
+    <!-- The EF Core *store* for ASP.NET Core Identity (UserManager/SignInManager persistence).
+         IdentityUser<Guid> itself ships in the shared framework (ADR 0007); this package does
+         not. Pinned to the same 10.0.10 as the EF Core family below. See ADR 0009. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <!-- Npgsql.EntityFrameworkCore.PostgreSQL only requires Relational >=10.0.4; pinned
