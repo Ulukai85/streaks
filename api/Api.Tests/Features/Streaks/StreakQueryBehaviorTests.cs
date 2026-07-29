@@ -26,41 +26,6 @@ public class StreakQueryBehaviorTests(PostgresFixture postgres, ApiFactory facto
 
     private static DateTimeOffset AsInstant(DateOnly periodStart) => new(periodStart.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
 
-    private async Task<Guid> SeedChallengeAsync(Cadence cadence, DateOnly startsOn, DateTimeOffset? archivedAt = null)
-    {
-        await using var db = CreateDbContext();
-        var user = await db.Users.AsNoTracking().SingleAsync();
-
-        var challenge = new Challenge
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Name = $"Streak test {Guid.NewGuid()}",
-            Cadence = cadence,
-            TargetCount = 1,
-            StartsOn = startsOn,
-            ArchivedAt = archivedAt,
-            Color = "blue",
-            SortOrder = 0,
-        };
-        db.Challenges.Add(challenge);
-        await db.SaveChangesAsync();
-        return challenge.Id;
-    }
-
-    private async Task SeedCompletionAsync(Guid challengeId, DateOnly periodStart, DateTimeOffset? completedAt = null)
-    {
-        await using var db = CreateDbContext();
-        db.Completions.Add(new Completion
-        {
-            Id = Guid.NewGuid(),
-            ChallengeId = challengeId,
-            PeriodStart = periodStart,
-            CompletedAt = completedAt ?? AsInstant(periodStart),
-        });
-        await db.SaveChangesAsync();
-    }
-
     private async Task<StreakResult> ForChallengeAsync(
         Guid challengeId, Cadence cadence, DateOnly startsOn, DateOnly? archivedAtLocalDateOnly, DateOnly today)
     {
@@ -150,7 +115,7 @@ public class StreakQueryBehaviorTests(PostgresFixture postgres, ApiFactory facto
         var archivedAtPeriod = PeriodsAgo(cadence, 5);
         var lastCompletion = PeriodsAgo(cadence, 6); // the period right before archiving - the grace case
         var startsOn = PeriodsAgo(cadence, 20);
-        var challengeId = await SeedChallengeAsync(cadence, startsOn, AsInstant(archivedAtPeriod));
+        var challengeId = await SeedChallengeAsync(cadence, startsOn, archivedAt: AsInstant(archivedAtPeriod));
         await SeedCompletionAsync(challengeId, lastCompletion);
 
         var result = await ForChallengeAsync(challengeId, cadence, startsOn, archivedAtPeriod, ReferenceToday[cadence]);
@@ -169,7 +134,7 @@ public class StreakQueryBehaviorTests(PostgresFixture postgres, ApiFactory facto
         var archivedAtPeriod = PeriodsAgo(cadence, 5);
         var lastCompletion = PeriodsAgo(cadence, 10); // gap predates archiving, not just the passage of real time
         var startsOn = PeriodsAgo(cadence, 20);
-        var challengeId = await SeedChallengeAsync(cadence, startsOn, AsInstant(archivedAtPeriod));
+        var challengeId = await SeedChallengeAsync(cadence, startsOn, archivedAt: AsInstant(archivedAtPeriod));
         await SeedCompletionAsync(challengeId, lastCompletion);
 
         var result = await ForChallengeAsync(challengeId, cadence, startsOn, archivedAtPeriod, ReferenceToday[cadence]);

@@ -19,10 +19,8 @@ namespace Api.Tests.Features.Auth;
 public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : IntegrationTestBase(postgres, factory)
 {
     [Fact]
-    public async Task Login_Succeeds_Returns_AccessToken_And_HttpOnly_Cookie_No_RefreshToken_In_Body()
-    {
-        (Guid userId, string username, string password) = await CreateTestUserAsync();
-        try
+    public async Task Login_Succeeds_Returns_AccessToken_And_HttpOnly_Cookie_No_RefreshToken_In_Body() =>
+        await WithTestUserAsync(async (_, username, password) =>
         {
             var client = CreateAnonymousClient();
             var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
@@ -42,18 +40,11 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             var lowerCookie = cookie.ToLowerInvariant();
             lowerCookie.Should().Contain("httponly", "the cookie must be unreadable by JavaScript - see ADR 0008");
             lowerCookie.Should().Contain("path=/api/auth");
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
-    public async Task Login_Returns_401_For_Wrong_Password()
-    {
-        (Guid userId, string username, _) = await CreateTestUserAsync();
-        try
+    public async Task Login_Returns_401_For_Wrong_Password() =>
+        await WithTestUserAsync(async (_, username, _) =>
         {
             var client = CreateAnonymousClient();
             var response = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, "definitely-wrong"));
@@ -61,12 +52,7 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
             var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
             problem!.Detail.Should().Be("Invalid username or password.");
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
     public async Task Login_Returns_401_For_Unknown_Username_With_Same_Generic_Message()
@@ -80,10 +66,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
     }
 
     [Fact]
-    public async Task Refresh_Rotates_Token_And_Revokes_Previous()
-    {
-        (Guid userId, string username, string password) = await CreateTestUserAsync();
-        try
+    public async Task Refresh_Rotates_Token_And_Revokes_Previous() =>
+        await WithTestUserAsync(async (userId, username, password) =>
         {
             var client = CreateAnonymousClient();
             await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
@@ -101,12 +85,7 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             tokens.Should().ContainSingle(t => t.RevokedAt != null);
             tokens.Should().ContainSingle(t => t.RevokedAt == null);
             tokens.Select(t => t.FamilyId).Distinct().Should().ContainSingle();
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
     public async Task Refresh_Returns_401_When_Cookie_Missing()
@@ -118,10 +97,8 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
     }
 
     [Fact]
-    public async Task Refresh_With_Already_Rotated_Token_Revokes_Whole_Family()
-    {
-        (Guid userId, string username, string password) = await CreateTestUserAsync();
-        try
+    public async Task Refresh_With_Already_Rotated_Token_Revokes_Whole_Family() =>
+        await WithTestUserAsync(async (userId, username, password) =>
         {
             var client = CreateAnonymousClient();
             var loginResponse = await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
@@ -150,18 +127,11 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             var tokens = await db.RefreshTokens.AsNoTracking().Where(t => t.UserId == userId).ToListAsync();
             tokens.Should().HaveCount(2);
             tokens.Should().OnlyContain(t => t.RevokedAt != null);
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
-    public async Task Refresh_Returns_401_For_Expired_Token()
-    {
-        (Guid userId, string username, string password) = await CreateTestUserAsync();
-        try
+    public async Task Refresh_Returns_401_For_Expired_Token() =>
+        await WithTestUserAsync(async (userId, username, password) =>
         {
             var client = CreateAnonymousClient();
             await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
@@ -176,18 +146,11 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             var response = await client.PostAsync("/api/auth/refresh", null);
 
             response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
-    public async Task Logout_Revokes_Token_Clears_Cookie_And_Following_Refresh_Fails()
-    {
-        (Guid userId, string username, string password) = await CreateTestUserAsync();
-        try
+    public async Task Logout_Revokes_Token_Clears_Cookie_And_Following_Refresh_Fails() =>
+        await WithTestUserAsync(async (userId, username, password) =>
         {
             var client = CreateAnonymousClient();
             await client.PostAsJsonAsync("/api/auth/login", new LoginRequest(username, password));
@@ -201,12 +164,7 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
             await using var db = CreateDbContext();
             var token = await db.RefreshTokens.AsNoTracking().SingleAsync(t => t.UserId == userId);
             token.RevokedAt.Should().NotBeNull();
-        }
-        finally
-        {
-            await DeleteTestUserAsync(userId);
-        }
-    }
+        });
 
     [Fact]
     public async Task Logout_Is_Not_An_Error_When_No_Cookie_Present()
@@ -227,6 +185,21 @@ public class AuthEndpointsTests(PostgresFixture postgres, ApiFactory factory) : 
         // IntegrationTestBase.InitializeAsync.
         var authenticatedResponse = await Client.GetAsync("/api/challenges/");
         authenticatedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    // Wraps the create/run/cleanup lifecycle shared by every test above that needs a throwaway
+    // user, replacing a repeated try/finally around CreateTestUserAsync()/DeleteTestUserAsync().
+    private async Task WithTestUserAsync(Func<Guid, string, string, Task> body)
+    {
+        (Guid userId, string username, string password) = await CreateTestUserAsync();
+        try
+        {
+            await body(userId, username, password);
+        }
+        finally
+        {
+            await DeleteTestUserAsync(userId);
+        }
     }
 
     private async Task<(Guid UserId, string Username, string Password)> CreateTestUserAsync()

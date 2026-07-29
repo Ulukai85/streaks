@@ -18,42 +18,6 @@ public class DashboardEndpointsTests(PostgresFixture postgres, ApiFactory factor
     private async Task<DateOnly> CurrentPeriodStartAsync(Cadence cadence) =>
         PeriodCalculator.PeriodStartFor(DateTimeOffset.UtcNow, await UserTimeZoneAsync(), cadence);
 
-    private async Task<Guid> SeedChallengeAsync(
-        Cadence cadence, DateOnly startsOn, int sortOrder = 0, DateTimeOffset? archivedAt = null)
-    {
-        await using var db = CreateDbContext();
-        var userId = (await db.Users.AsNoTracking().SingleAsync()).Id;
-
-        var challenge = new Challenge
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Name = $"Dashboard test {Guid.NewGuid()}",
-            Cadence = cadence,
-            TargetCount = 1,
-            StartsOn = startsOn,
-            ArchivedAt = archivedAt,
-            Color = "blue",
-            SortOrder = sortOrder,
-        };
-        db.Challenges.Add(challenge);
-        await db.SaveChangesAsync();
-        return challenge.Id;
-    }
-
-    private async Task SeedCompletionAsync(Guid challengeId, DateOnly periodStart)
-    {
-        await using var db = CreateDbContext();
-        db.Completions.Add(new Completion
-        {
-            Id = Guid.NewGuid(),
-            ChallengeId = challengeId,
-            PeriodStart = periodStart,
-            CompletedAt = DateTimeOffset.UtcNow,
-        });
-        await db.SaveChangesAsync();
-    }
-
     [Fact]
     public async Task Get_Returns_Empty_Groups_When_No_Challenges()
     {

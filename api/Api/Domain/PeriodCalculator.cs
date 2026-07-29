@@ -8,7 +8,7 @@ public static class PeriodCalculator
     {
         var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         var local = TimeZoneInfo.ConvertTime(instant, tz);
-        
+
         var today = DateOnly.FromDateTime(local.DateTime);
 
         return cadence switch

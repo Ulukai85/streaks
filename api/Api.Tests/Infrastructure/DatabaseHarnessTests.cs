@@ -39,7 +39,7 @@ public class DatabaseHarnessTests(PostgresFixture postgres, ApiFactory factory) 
             Name = "Isolation check challenge",
             Cadence = Cadence.Daily,
             TargetCount = 1,
-            StartsOn = DateOnly.FromDateTime(DateTime.UtcNow),
+            StartsOn = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime),
             Color = "blue",
             SortOrder = 0,
         });
@@ -65,14 +65,14 @@ public class DatabaseHarnessTests(PostgresFixture postgres, ApiFactory factory) 
             Name = "Unique constraint check challenge",
             Cadence = Cadence.Daily,
             TargetCount = 1,
-            StartsOn = DateOnly.FromDateTime(DateTime.UtcNow),
+            StartsOn = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime),
             Color = "blue",
             SortOrder = 0,
         };
         arrangeDb.Challenges.Add(challenge);
         await arrangeDb.SaveChangesAsync();
 
-        var periodStart = DateOnly.FromDateTime(DateTime.UtcNow);
+        var periodStart = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
 
         await using var firstDb = CreateDbContext();
         firstDb.Completions.Add(new Completion

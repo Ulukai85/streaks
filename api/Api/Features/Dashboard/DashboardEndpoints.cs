@@ -55,6 +55,9 @@ public static class DashboardEndpoints
                 // calendar date - see StreakQueryBehaviorTests.ReferenceToday's comment.
                 var currentPeriodStart = periodStartByCadence[challenge.Cadence];
 
+                // One query per challenge, unlike the batched completedThisPeriod lookup above -
+                // deliberate: batching would mean reworking the streak SQL to accept multiple
+                // challenge ids, which is out of scope. Fine at v1's expected challenge counts.
                 var streak = await new StreakQuery(db).ForChallenge(
                     challenge.Id, challenge.Cadence, challenge.StartsOn,
                     archivedAtLocalDateOnly: null, currentPeriodStart, ct);

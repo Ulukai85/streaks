@@ -38,6 +38,8 @@ public class RefreshTokenIssuer(AppDbContext db, TimeProvider timeProvider)
 
     public async Task<(RefreshToken Token, string RawToken)?> RotateAsync(string presentedRawToken, CancellationToken ct)
     {
+        // Tracked query, deliberately not AsNoTracking(): existing.RevokedAt may be mutated and
+        // saved below, unlike every other read path in this class.
         var hash = Hash(presentedRawToken);
         var existing = await db.RefreshTokens.SingleOrDefaultAsync(t => t.TokenHash == hash, ct);
 

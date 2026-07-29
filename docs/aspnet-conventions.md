@@ -64,8 +64,8 @@ are all this shape.
 `Completion`) keep object-initializer style with `required` settable
 properties, not primary constructors — EF Core materializes and updates them
 through property setters by convention, and `new Challenge { Name = ..., }`-style
-construction (Stage 4's create endpoint, tests) reads better against that
-than positional constructor args would. Reach for a primary constructor by
+construction (Phase 2 Stage 4's create endpoint, tests) reads better against
+that than positional constructor args would. Reach for a primary constructor by
 default; keep the object-initializer style for entities that EF owns.
 
 ## EF configuration habits for new entities

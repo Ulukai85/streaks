@@ -1,4 +1,5 @@
 using Api.Data;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Api.Features.Health;
 
@@ -8,12 +9,12 @@ public static class HealthEndpoints
     {
         var group = app.MapGroup("/api/health");
 
-        group.MapGet("/", async (AppDbContext db, CancellationToken ct) =>
+        group.MapGet("/", async Task<Results<Ok<HealthResponse>, ProblemHttpResult>> (AppDbContext db, CancellationToken ct) =>
         {
             var connected = await db.Database.CanConnectAsync(ct);
             return connected
-                ? Results.Ok(new HealthResponse("ok", true))
-                : Results.Problem(
+                ? TypedResults.Ok(new HealthResponse("ok", true))
+                : TypedResults.Problem(
                     title: "Service unavailable",
                     detail: "Database connection failed.",
                     statusCode: StatusCodes.Status503ServiceUnavailable);

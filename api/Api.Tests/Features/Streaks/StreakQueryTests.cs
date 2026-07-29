@@ -11,8 +11,8 @@ public class StreakQueryTests
     private static int SqlOrdinal(DateOnly periodStart, Cadence cadence)
     {
         // "PeriodStart" - DATE '1970-01-01'
-        var daysSinceEpoch = periodStart.DayNumber - new DateOnly(1970, 1, 1).DayNumber; 
-        
+        var daysSinceEpoch = periodStart.DayNumber - new DateOnly(1970, 1, 1).DayNumber;
+
         return cadence switch
         {
             Cadence.Daily => daysSinceEpoch,

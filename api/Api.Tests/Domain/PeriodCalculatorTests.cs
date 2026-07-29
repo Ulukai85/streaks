@@ -83,8 +83,7 @@ public class PeriodCalculatorTests
     public void PeriodStartFor_ReturnsCorrectDate(string because, DateTimeOffset instant, string timeZoneId, Cadence cadence, DateOnly expected)
     {
         var result = PeriodCalculator.PeriodStartFor(instant, timeZoneId, cadence);
-        
+
         result.Should().Be(expected, because);
     }
-    
 }

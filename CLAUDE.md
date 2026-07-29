@@ -10,6 +10,9 @@ read it before doing anything non-trivial. This file just orients you.
   the deployable stack (Postgres + api + Caddy).
 - `docs/domain.md` — the period/streak domain model, restated as prose. Read
   this before touching anything cadence- or streak-related.
+- `docs/phase-2-plan.md` / `docs/phase-3-plan.md` — working plans tracking
+  stage-by-stage status as each phase lands; check here for what's done vs.
+  still ahead.
 - `docs/decisions/` — ADRs. One is required before any new dependency.
 - `docs/aspnet-conventions.md` — backend code organization conventions.
 - `docs/angular-conventions.md` — frontend code organization conventions.
@@ -36,12 +39,6 @@ read it before doing anything non-trivial. This file just orients you.
 - No MediatR/CQRS, no repository pattern over EF Core, no NgRx, no
   microservices/GraphQL.
 - No new NuGet/npm dependency without an ADR first.
-
-## Off-limits without asking
-
-`PeriodStartFor` and the streak SQL are written by hand by the human, not
-generated (PROJECT-BRIEF.md §10). If a task seems to require either, stop and
-confirm.
 
 ## Process
 

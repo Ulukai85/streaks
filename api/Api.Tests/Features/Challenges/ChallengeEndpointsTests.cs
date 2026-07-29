@@ -109,7 +109,7 @@ public class ChallengeEndpointsTests(PostgresFixture postgres, ApiFactory factor
             Name = name,
             Cadence = Cadence.Daily,
             TargetCount = 1,
-            StartsOn = DateOnly.FromDateTime(DateTime.UtcNow),
+            StartsOn = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime),
             Color = "blue",
             SortOrder = sortOrder,
             ArchivedAt = archived ? DateTimeOffset.UtcNow : null,

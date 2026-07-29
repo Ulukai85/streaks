@@ -72,9 +72,7 @@ static DateOnly PeriodStartFor(DateTimeOffset instant, string timeZoneId, Cadenc
 This is the heart of the application: a pure function, deterministic for a
 given `(instant, timeZoneId, cadence)` triple, with no database access, no
 `DateTime.Now`, and no other ambient state. A bug here silently corrupts
-every streak in the system, so it is tested before it is implemented (see
-§10 of the brief — this function and its tests are written by the human,
-not the agent).
+every streak in the system, so it is tested before it is implemented.
 
 Required test cases, and why each one exists:
 

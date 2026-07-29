@@ -14,36 +14,29 @@ folders, when a service class is warranted).
 - **`AsNoTracking()` on every read path.** No exceptions in v1.
 - **No endpoint reads a hardcoded user id directly.** Inject
   `ICurrentUserProvider` (`Api/Infrastructure/`) instead — `HttpCurrentUserProvider`
-  reads it from the authenticated request's `ClaimTypes.NameIdentifier` claim
-  (Phase 3 Stage 3; replaced the Phase 2 `DevCurrentUserProvider`, a one-line
-  DI swap instead of a hunt through every endpoint and test).
+  reads it from the authenticated request's `ClaimTypes.NameIdentifier` claim.
 - **No repository pattern over EF Core.** `DbContext` is already the
   abstraction (see ADR 0002).
 - **No new NuGet dependency without an ADR** in `docs/decisions/` first
   (three sentences: what problem, what alternative was considered, why
-  this). Note: `IdentityUser<TKey>` (`Microsoft.AspNetCore.Identity`) and the
-  rest of ASP.NET Core Identity ship in the shared framework — a
-  `Microsoft.NET.Sdk.Web` project like `Api.csproj` references it implicitly,
-  so deriving `User : IdentityUser<Guid>` (ADR 0007) did not need a new
-  package. `Microsoft.AspNetCore.Identity.EntityFrameworkCore` (the EF user
-  store) *is* a real package and was added in Phase 3 Stage 1 under ADR 0009.
-- **`AppDbContext` is a plain `DbContext`, not `IdentityDbContext`** (ADR
-  0009). The three Identity entities (`IdentityUserClaim<Guid>`,
-  `IdentityUserLogin<Guid>`, `IdentityUserToken<Guid>` → tables
-  `UserClaims`/`UserLogins`/`UserTokens`) are configured inline in
-  `OnModelCreating`, not as `IEntityTypeConfiguration<T>` files — those are
-  for domain entities. The three tables are unused by the auth flow and
-  should stay empty; they exist only because `UserOnlyStore`'s constructor
-  requires them in the model. Because the context isn't an
-  `IdentityDbContext`, **nothing else applies Identity's own column
-  configuration** — `UserConfiguration` has to pin the `varchar(256)`
-  lengths, the `ConcurrencyStamp` concurrency token, and the unique
-  `NormalizedUserName` index by hand.
+  this). `IdentityUser<TKey>` ships in the shared framework and needed no
+  new package (ADR 0007); `Microsoft.AspNetCore.Identity.EntityFrameworkCore`
+  (the EF user store) is the one real package added so far (ADR 0009).
+- **`AppDbContext` is a plain `DbContext`, not `IdentityDbContext`** — the
+  three Identity entity tables are configured inline in `OnModelCreating`,
+  and `UserConfiguration` pins the column config Identity would otherwise
+  supply automatically. Full reasoning in ADR 0009.
 - **Refresh tokens are hand-rolled** (`Api/Domain/RefreshToken.cs` +
-  `RefreshTokens` table), not Identity's `RefreshTokenProtector` and not
-  `UserTokens` — that's what buys per-device logout and reuse detection.
-  The **access** token does go through Identity's
-  `BearerTokenOptions.BearerTokenProtector` via `AddBearerToken`.
+  `RefreshTokens` table) for per-device logout and reuse detection, not
+  Identity's `RefreshTokenProtector`. The **access** token does go through
+  Identity's `BearerTokenOptions.BearerTokenProtector` via `AddBearerToken`
+  — minted by hand-building an `AuthenticationTicket` with scheme
+  `$"{IdentityConstants.BearerScheme}:AccessToken"` and passing it straight
+  to `BearerTokenProtector.Protect(...)` (see
+  `AuthEndpoints.MintAccessTokenAsync`), not via `Context.SignInAsync`,
+  which would write the framework's own response body instead of ours. This
+  mirrors `BearerTokenHandler.CreateBearerTicket` exactly (source:
+  `dotnet/aspnetcore`) so the framework's own validation handler accepts it.
 - Integration tests use **Testcontainers with real PostgreSQL** — never
   in-memory, never SQLite (see ADR 0003). If `dotnet test` fails pulling an
   image with a Docker "Unauthorized" error, see `docs/troubleshooting.md` —
@@ -87,12 +80,6 @@ See `docs/aspnet-conventions.md` for code organization. Beyond that:
 - `api/.dockerignore` must keep excluding `bin/`/`obj/` — otherwise a local
   build's artifacts get copied into the Docker image and clobber the
   container's own `dotnet restore`.
-
-## Off-limits without asking first
-
-`PeriodStartFor` and the streak SQL are written by the human, by hand (see
-`docs/domain.md` and PROJECT-BRIEF.md §10). If a task seems to require
-touching either, stop and confirm before writing code.
 
 ## Architectural non-goals
 

@@ -71,3 +71,25 @@ mounting the old path makes the entrypoint see "unused" data in the wrong
 layout and refuse to start. `infrastructure/docker-compose.yml` already
 mounts the volume at the correct path — if a future edit reverts this, the
 `postgres` service will come up unhealthy.
+
+## `WebApplicationFactory`/`TestServer` cookie gotchas (auth tests)
+
+Two things that will silently break a cookie-based auth test, found while
+building `AuthEndpointsTests`:
+
+**A `Secure` cookie is never sent to a plain-`http://` `TestServer` request**,
+regardless of what `IHostEnvironment.EnvironmentName` reports. `AuthEndpoints`
+sets the refresh cookie's `Secure` flag to `!env.IsDevelopment()`. This is why
+`ApiFactory` stays on `builder.UseEnvironment("Development")` rather than a
+`"Testing"` environment name — switching it would flip `Secure` to `true` and
+every refresh/logout test would stop receiving the cookie, with no error
+beyond a confusing "cookie missing" 401.
+
+**`WebApplicationFactory`'s default client silently overwrites a manual
+`Cookie` header.** `WebApplicationFactoryClientOptions.HandleCookies` defaults
+to `true`, which stores and re-sends cookies automatically — but if a test
+also sets `request.Headers.Add("Cookie", ...)` by hand (e.g. to replay a
+specific stale token), the client's own cookie jar wins and silently replaces
+it. Use a second client built with `new WebApplicationFactoryClientOptions
+{ HandleCookies = false }` for any request that needs to send a manually
+chosen cookie value.
