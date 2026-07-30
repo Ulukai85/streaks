@@ -1,1 +1,9 @@
-<router-outlet />
+<div class="flex min-h-dvh flex-col">
+  <header class="flex items-center justify-between border-b p-4">
+    <span class="font-semibold">Streaks</span>
+    @if (authService.isAuthenticated()) {
+      <button hlmBtn variant="outline" size="sm" (click)="logout()">Abmelden</button>
+    }
+  </header>
+  <router-outlet />
+</div>

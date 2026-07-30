@@ -175,27 +175,42 @@ clean, `ng build` clean.
 
 ## Stage 6 — Angular: Login UI + nav shell
 
-**Status: Not started**
+**Status: Done.** `login-page.ts` (+ `.spec.ts`) follows `challenge-form.ts`'s
+Signal Forms/Helm-input/problem-details-error pattern (`required()` on
+`username`/`password`, mirroring the backend's `NotEmpty`-only validator),
+wrapped in a centered `hlmCard` like `health-status.ts`. On success it calls
+`authService.login()` then `router.navigateByUrl('/')`; on a 401 it reuses
+`challenge-form.ts`'s exact non-field `{ kind: 'server', message:
+error.detail ?? error.title }` mapping — no `errors` map exists on the
+login 401, so no per-field mapping was needed. `app.routes.ts` adds an
+unguarded `{ path: 'login', component: LoginPage }`. Per decision #7,
+`app.ts`/`app.html` now render a minimal top bar with an "Abmelden" button
+(`hlmBtn`) shown only when `authService.isAuthenticated()`, wired to
+`logout()` → `navigateByUrl('/login')`.
 
-- `web/src/app/features/auth/login-page.ts` (+ `.spec.ts`) — Signal Forms,
-  spartan-ng Helm inputs, matching `challenge-form.ts`'s existing
-  form/validation/problem-details-error pattern exactly. On success:
-  `authService.login()` then navigate to `/`. On failure: generic message
-  (matches the backend's generic 401), same `kind: 'server'` error-mapping
-  pattern already used in `challenge-form.ts`.
-- Modify `app.routes.ts` — add `{ path: 'login', component: LoginPage }`,
-  unguarded.
-- Per decision #7: modify `app.html`/`app.ts` to add a minimal top bar shown
-  app-wide, with a logout button ("Abmelden", per `web/CLAUDE.md`'s
-  German-UI-text rule) visible only when `authService.isAuthenticated()` is
-  true — calls `authService.logout()` then navigates to `/login`.
-- `login-page.spec.ts` following `challenge-form.spec.ts`'s existing pattern.
+One non-obvious test gotcha hit and fixed: `fixture.whenStable()` doesn't
+wait for a plain-`async`-function submission action the way it does for a
+router navigation or an `httpResource` — Angular's router integrates with
+the framework's pending-task tracking (so the success-path test's single
+`whenStable()` happened to work), but a bare `await authService.login()`
+promise chain inside a Signal Forms submission action isn't tracked at all,
+so `whenStable()` can resolve before the action (and thus the rendered
+error) has actually settled. `login-page.spec.ts`'s failure-path test uses
+an explicit microtask-draining helper instead of `whenStable()` to wait for
+this deterministically — a pattern worth reusing for any future test that
+asserts on a Signal Forms submission error rendered from an `HttpClient`
+call.
 
-**Verify:** `ng test`/`ng lint`/`ng build` clean. Manual browser pass: log
-in, hard-reload a guarded route (access token should silently restore via
-the cookie), force/wait for a 401 to confirm the interceptor's
-refresh-and-retry, log out and confirm redirected/blocked from guarded
-routes, confirm `/health` still renders without a session.
+Verified: `ng test` 32/32, `ng lint`/`ng build` clean. Manual browser pass
+(via a headless-Chromium Playwright driver script, backend run locally with
+`dotnet run` against the Compose Postgres, frontend via `ng serve`):
+hitting a guarded route while logged out redirects to `/login`; wrong
+credentials show the generic German error and don't navigate; correct
+credentials (`dev`/`Dev-Password-123!`, the Development seed) land on the
+dashboard with "Abmelden" visible; a hard reload stays on the dashboard
+(silent refresh via the cookie through `authGuard`); `/challenges` is
+reachable; logging out redirects to `/login` and a subsequent guarded-route
+hit bounces back to `/login`; `/health` renders with no session throughout.
 
 ---
 
