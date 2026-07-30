@@ -129,22 +129,19 @@ manual `curl` pass confirmed `/api/health` stays open, `/api/challenges/`
 
 ## Stage 4 — Angular: `AuthService`
 
-**Status: Not started**
-
-- `web/src/app/features/auth/auth.model.ts` — `LoginRequest`, `LoginResponse`
-  matching the backend shape (check `challenge.model.ts` for how existing
-  date fields are typed over JSON before assuming a type for `expiresAt`).
-- `web/src/app/features/auth/auth.service.ts` — `@Service()`, an in-memory
-  `signal<string | null>` for the access token, `isAuthenticated =
-  computed(...)`. `login()`/`refresh()`/`logout()` call
-  `/api/auth/{login,refresh,logout}` via `HttpClient` + `firstValueFrom`,
-  each with `withCredentials: true` explicitly set (belt-and-suspenders for
-  same-origin cookie attachment). `refresh()` failure and `logout()` both
-  clear the signal.
-- `auth.service.spec.ts` — `TestBed.tick()` pattern per
-  `docs/angular-conventions.md`, `HttpTestingController` for the three calls.
-
-**Verify:** `ng test` green for the new spec.
+**Status: Done.** `web/src/app/features/auth/auth.model.ts` (`LoginRequest`/
+`LoginResponse`, `expiresAt` typed as `string` per the existing date-field
+convention) and `auth.service.ts` landed — `@Service()`, an in-memory
+`signal<string | null>` access token exposed as `token` (readonly, for the
+Stage 5 interceptor) and `isAuthenticated = computed(...)`.
+`login()`/`refresh()`/`logout()` call `/api/auth/{login,refresh,logout}` via
+`HttpClient` + `firstValueFrom`, each with `withCredentials: true`.
+`refresh()` failure clears the token and rethrows; `logout()` clears the
+token in a `finally` regardless of response outcome. No `httpResource` is
+used (no read state, only mutations), so `TestBed.tick()` wasn't needed in
+`auth.service.spec.ts` — plain `HttpTestingController` request/flush per
+call, matching `challenges.service.spec.ts`'s non-resource assertions.
+Verified: `ng test` 19/19 green (5 new), `ng lint` clean.
 
 ---
 
