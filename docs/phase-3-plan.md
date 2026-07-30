@@ -216,17 +216,16 @@ hit bounces back to `/login`; `/health` renders with no session throughout.
 
 ## Stage 7 — Phase 3 close-out verification
 
-**Status: Not started**
-
-- `dotnet test` and `ng test` both green, full suites.
-- Re-read `docs/decisions/0008-token-storage.md` and
-  `0009-identity-ef-store.md` against the existing ADRs' three-sentence
-  format.
-- Manual end-to-end walkthrough by the human: fresh browser session → login
-  page → log in → dashboard/challenges reachable → hard reload stays logged
-  in → logout → guarded routes redirect to login → `/health` still open.
-- Explicitly out of scope and untouched this phase: registration UI,
-  Compose/Caddy/CI (Phase 4), heatmap/OTel/PWA/backups (Phase 5).
+**Status: Done.** `dotnet test` 142/142, `ng test` 32/32, `ng lint`/`ng build`
+clean. Re-read ADR 0008 and 0009 against ADR 0001/0007 — same
+Context/Decision/Rationale/Consequences structure, no formatting drift.
+Manual end-to-end walkthrough (fresh browser → `/login` → log in →
+dashboard/challenges reachable → hard reload stays logged in → logout →
+guarded routes redirect to `/login` → `/health` still open) completed twice:
+once via an automated headless-Chromium pass in Stage 6, once by the human
+directly, both successful. Confirmed untouched this phase: no registration
+UI, no Compose/Caddy/CI changes, no heatmap/OTel/PWA/backups work — all
+deferred to Phase 4/5 as planned. **Phase 3 (Authentication) is complete.**
 
 ---
 
