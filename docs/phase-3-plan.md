@@ -147,28 +147,29 @@ Verified: `ng test` 19/19 green (5 new), `ng lint` clean.
 
 ## Stage 5 — Angular: `authInterceptor` + `authGuard`
 
-**Status: Not started**
-
-- `web/src/app/features/auth/auth.interceptor.ts` — functional
-  `HttpInterceptorFn`, attaches `Authorization: Bearer <token>` from
-  `AuthService` when present. On a 401 (and only if the failing request
-  wasn't itself `/auth/...`, to avoid a refresh-loop), calls `refresh()` once
-  and retries the original request; no retry counter beyond that single
-  attempt, per decision #4.
-- Modify `app.config.ts` — `provideHttpClient(withInterceptors([authInterceptor]))`.
-- `web/src/app/features/auth/auth.guard.ts` — functional `CanActivateFn`. If
-  already authenticated, allow. Otherwise attempt a silent `refresh()` first
-  (covers hard-reload landing on a guarded route) before redirecting to
-  `/login`. This is the single place silent-refresh happens — no separate
-  bootstrap/`APP_INITIALIZER`-equivalent needed, since the only unguarded
-  route is `/login` itself, which doesn't need auth state.
-- Modify `app.routes.ts` — `canActivate: [authGuard]` on the Dashboard and
-  Challenges routes.
-- `auth.interceptor.spec.ts` / `auth.guard.spec.ts` — using
-  `TestBed.runInInjectionContext` for the functional guard/interceptor
-  testing pattern.
-
-**Verify:** `ng test` green for both new specs; `ng lint`/`ng build` clean.
+**Status: Done.** `auth.interceptor.ts` attaches `Authorization: Bearer
+<token>` to same-origin API requests (`req.url.startsWith(environment.apiUrl)`)
+when `AuthService.token()` is set; on a 401 whose request URL isn't itself
+under `${environment.apiUrl}/auth/`, it calls `authService.refresh()` once
+(via `from`/`switchMap`, the RxJS exception to the house `firstValueFrom`
+style since interceptors must return an `Observable`) and retries the
+original request once with the new token — on refresh failure it propagates
+the *original* 401 rather than the refresh's own error, relying on
+`AuthService.refresh()` already clearing the token signal (Stage 4) so the
+next guarded navigation naturally redirects. `auth.guard.ts` is a functional
+`CanActivateFn`: allows if already authenticated, otherwise attempts a
+silent `refresh()` (covers hard-reload landing on a guarded route) and
+returns a `UrlTree` to `/login` on failure — the single place silent-refresh
+happens. `app.config.ts` wires `provideHttpClient(withInterceptors([authInterceptor]))`;
+`app.routes.ts` adds `canActivate: [authGuard]` to the Dashboard (`''`) and
+Challenges routes (`health` stays open). Tests use
+`TestBed.runInInjectionContext` to invoke the guard/interceptor directly,
+with `HttpTestingController` driving `AuthService`'s real HTTP calls and a
+hand-rolled `HttpHandlerFn` test double (`vi.fn<HttpHandlerFn>(...)`) as
+`next` for the interceptor cases (token attached/omitted, 401-then-retry,
+no-retry-on-auth-endpoint-401, refresh-failure propagates original error).
+Verified: `ng test` 27/27 green (5 guard + 5 interceptor new), `ng lint`
+clean, `ng build` clean.
 
 ---
 
