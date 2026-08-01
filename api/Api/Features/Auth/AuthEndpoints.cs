@@ -85,7 +85,7 @@ public static class AuthEndpoints
             SetRefreshCookie(httpContext, rawRefreshToken, refreshToken.ExpiresAt, env);
 
             return TypedResults.Ok(new LoginResponse(accessToken, expiresAt));
-        });
+        }).RequireRateLimiting(RateLimitingServiceCollectionExtensions.RefreshPolicy);
 
         group.MapPost("/logout", async Task<NoContent> (
             HttpContext httpContext,

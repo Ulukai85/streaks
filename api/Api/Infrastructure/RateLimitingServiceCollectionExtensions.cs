@@ -6,6 +6,7 @@ namespace Api.Infrastructure;
 public static class RateLimitingServiceCollectionExtensions
 {
     public const string LoginPolicy = "login";
+    public const string RefreshPolicy = "refresh";
 
     public static IServiceCollection AddAppRateLimiting(this IServiceCollection services, IHostEnvironment environment)
     {
@@ -25,6 +26,19 @@ public static class RateLimitingServiceCollectionExtensions
                 // would rate-limit the test suite itself, not an attacker. Only enforce it
                 // outside Development.
                 limiterOptions.PermitLimit = environment.IsDevelopment() ? int.MaxValue : 10;
+                limiterOptions.Window = TimeSpan.FromMinutes(1);
+                limiterOptions.QueueLimit = 0;
+            });
+
+            // /refresh is unauthenticated-reachable the same way /login is (see AuthEndpoints)
+            // and does a DB lookup per call (RefreshTokenIssuer.RotateAsync) even for a garbage
+            // cookie - a flood with no valid session costs nothing to send but still hits the
+            // database every time. Same reasoning as LoginPolicy above; a higher limit than
+            // login's because a legitimate client calls this on every hard reload/new tab
+            // (ADR 0008), not just on an explicit user action.
+            options.AddFixedWindowLimiter(RefreshPolicy, limiterOptions =>
+            {
+                limiterOptions.PermitLimit = environment.IsDevelopment() ? int.MaxValue : 20;
                 limiterOptions.Window = TimeSpan.FromMinutes(1);
                 limiterOptions.QueueLimit = 0;
             });

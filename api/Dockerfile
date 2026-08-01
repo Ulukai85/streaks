@@ -9,6 +9,12 @@ RUN dotnet publish Api/Api.csproj -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.10 AS runtime
 WORKDIR /app
-COPY --from=build /app/publish .
+# /keys backs AddDataProtection().PersistKeysToFileSystem() (see
+# Api/Infrastructure/DataProtectionServiceCollectionExtensions.cs) - created and owned by the
+# built-in non-root $APP_UID user before switching to it, since the named volume mounted here
+# needs to be writable by whoever the process actually runs as.
+RUN mkdir -p /keys && chown $APP_UID /keys
+COPY --from=build --chown=$APP_UID /app/publish .
+USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Api.dll"]
