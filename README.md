@@ -8,10 +8,12 @@ Stack: ASP.NET Core (.NET 10) + EF Core/PostgreSQL API in `api/`, Angular 22
 frontend in `web/`, Docker Compose + Caddy deployment config in
 `infrastructure/`.
 
-## Running the backend stack (Docker Compose)
+## Running the full stack (Docker Compose)
 
-This brings up Postgres, the API, and Caddy — not the frontend (see "Local
-development" below to run that).
+This brings up Postgres, the API, and Caddy — Caddy serves the built
+Angular app itself and reverse-proxies `/api/*` to the API, so this is the
+whole app, not just the backend (see "Local development" below for a
+faster edit-reload loop instead).
 
 ```bash
 cd infrastructure
@@ -26,26 +28,39 @@ exits) without a `SEED_USER_PASSWORD` on an empty `Users` table (decision
 
 Three services come up on one Docker network:
 
-| Service    | Image                | Host port | Purpose                                |
-|------------|----------------------|-----------|-----------------------------------------|
-| `postgres` | `postgres:18-alpine` | `5433`    | Database (mapped off 5432 — see below) |
-| `api`      | built from `api/`    | —         | ASP.NET Core API, not exposed directly |
-| `caddy`    | `caddy:2-alpine`     | `8080`    | Reverse proxy to `api`                 |
+| Service    | Image                       | Host port         | Purpose                                                |
+|------------|------------------------------|-------------------|---------------------------------------------------------|
+| `postgres` | `postgres:18.4-alpine`      | `127.0.0.1:5433`  | Database (loopback-only — not reachable off the box)   |
+| `api`      | built from `api/`           | —                 | ASP.NET Core API, not exposed directly                 |
+| `caddy`    | built from `web/`           | `8080`            | Serves the built Angular app + reverse-proxies `/api/*` |
 
-Verify it's up:
+All three run as non-root inside their containers. Verify it's up:
 
 ```bash
 curl http://localhost:8080/api/health
 # {"status":"ok","databaseConnected":true}
+curl -I http://localhost:8080/
+# 200 OK — the Angular app shell
 ```
 
 Tear down with `docker compose down` (add `-v` to also drop the Postgres
 volume).
 
-`infrastructure/docker-compose.prod.yml` is a server-only override that
-points `api`/`caddy` at pre-built GHCR images instead of building locally —
-see ADR 0010. It's never used in local dev; the commands above are
-unaffected.
+## Production deployment
+
+CI (`.github/workflows/ci.yml`) tests and builds every PR and push to
+`main`; CD (`.github/workflows/deploy.yml`) then builds `api`/`caddy`
+images, pushes them to GHCR, and deploys over SSH once CI is green — see
+`docs/decisions/0010-deploy-mechanism.md` for the full decision and
+`docs/phase-4-plan.md` (Stage 6) for the current setup status.
+
+The server does **not** need a clone of this repo — only four files under
+an `infrastructure/` directory (e.g. `/opt/streaks/infrastructure/`):
+`docker-compose.yml`, `docker-compose.prod.yml` (a server-only override
+pointing `api`/`caddy` at the pre-built GHCR images instead of building
+locally — never used in local dev), `Caddyfile`, and a real `.env`. CD only
+pulls/restarts images; it does not sync these four files, so a change to
+any of them needs manually re-copying to the server.
 
 ## Local development (without full containerization)
 
@@ -61,5 +76,7 @@ compose Postgres must be running (`docker compose up -d postgres` is enough).
 
 - `api/` — backend (see `api/CLAUDE.md`)
 - `web/` — frontend (see `web/CLAUDE.md`)
-- `infrastructure/` — `docker-compose.yml`, `Caddyfile`, `.env.example`
+- `infrastructure/` — `docker-compose.yml`, `docker-compose.prod.yml`,
+  `Caddyfile`, `deploy.sh`, `.env.example`
+- `.github/workflows/` — CI (`ci.yml`) and CD (`deploy.yml`)
 - `docs/` — domain model, ADRs, conventions, troubleshooting (see root `CLAUDE.md`)

@@ -318,12 +318,41 @@ these was chosen over the alternative.
 add `DEPLOY_HOST`/`DEPLOY_USER` (`deploy`)/`DEPLOY_SSH_KEY` repo secrets;
 configure branch protection on `main` requiring the `api`/`web` CI checks;
 confirm the two GHCR packages are public after the first push; enable
-Dependabot alerts for npm + NuGet. **Also needed:** clone/place the repo at
-`/opt/streaks` on the server; copy `infrastructure/deploy.sh` to
-`/home/deploy/deploy.sh` and `chmod +x` it; add the `command="/home/deploy/deploy.sh"`
-restriction to the deploy key's line in `~deploy/.ssh/authorized_keys`.
-Keep the server-side copy of `deploy.sh` in sync by hand if the
-repo-tracked version ever changes — CI doesn't push it automatically.
+Dependabot alerts for npm + NuGet.
+
+**Also needed — and note this is *not* a git clone.** `docker-compose.yml`'s
+only bind-mount from disk is `./Caddyfile` — everything else is either a
+named Docker volume (Docker-managed, not a repo file) or a `build:` context
+that `deploy.sh` never touches (it only runs `pull` + `up -d`, never
+`--build`). So the server needs exactly **four files** under
+`/opt/streaks/infrastructure/`, not the repo:
+`docker-compose.yml`, `docker-compose.prod.yml`, `Caddyfile`, and `.env`
+(copied from `.env.example` with real `POSTGRES_PASSWORD`/`SEED_USER_NAME`/
+`SEED_USER_PASSWORD` filled in). Copy those four there (`scp` from a local
+checkout, or paste manually — they rarely change); copy
+`infrastructure/deploy.sh` to `/home/deploy/deploy.sh` and `chmod +x` it;
+add the `command="/home/deploy/deploy.sh"` restriction to the deploy key's
+line in `~deploy/.ssh/authorized_keys`.
+
+**Known limitation worth knowing about, not an oversight:** CD doesn't sync
+config files, only Docker images. If `Caddyfile` or either compose file
+ever changes in the repo, the server's copies don't update automatically —
+`deploy.yml` never pushes them. Re-copy by hand after such a change (same
+for `deploy.sh` itself if it's ever edited).
+
+**Host-level Caddy** (outside this repo, per the Stage 2 decision — TLS
+termination and the real domain live there, not in `infrastructure/Caddyfile`):
+
+```
+your-domain.example {
+	reverse_proxy localhost:8080
+}
+```
+
+That's the whole thing — Caddy's automatic HTTPS kicks in on its own once a
+real domain is the site address instead of a bare `:port`. Security headers
+are already set by the compose Caddy and pass through `reverse_proxy`
+untouched, so no need to duplicate them here.
 
 **Verify:** a trivial change pushed to `main` is live on the domain within
 the pipeline's run time; a deliberately failing test on a PR blocks the merge

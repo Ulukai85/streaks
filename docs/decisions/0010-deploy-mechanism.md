@@ -38,7 +38,12 @@ approaches runs on the other end of it.
   `sshd_config`/`ufw` rules — not something CI pushes). The app itself lives
   at `/opt/streaks` on the server, following the FHS convention for
   self-installed application software (as opposed to `/usr`, which is
-  OS-managed).
+  OS-managed) — but this is **not a git clone**. Since `docker-compose.yml`'s
+  only bind-mount from disk is `./Caddyfile`, and `deploy.sh` never runs
+  `--build`, the server only needs four files under
+  `/opt/streaks/infrastructure/`: `docker-compose.yml`,
+  `docker-compose.prod.yml`, `Caddyfile`, `.env`. No `api/`, no `web/`, no
+  `.git`.
 - **GHCR packages are public.** No pull credential is needed on the server
   at all; `docker compose pull` just works. The images contain only
   compiled app code (the API binary, the Angular build, Caddy config) —
@@ -118,3 +123,12 @@ approaches runs on the other end of it.
   "no server credential" consequence goes away and a PAT-based login step
   would need adding back on the server — flagged here so it isn't a
   surprise if that assumption changes.
+- **CD doesn't sync config files, only Docker images.** `deploy.yml` builds
+  and pushes images, then `deploy.sh` pulls and restarts — it never copies
+  `Caddyfile` or the compose files to the server. If either changes in the
+  repo, the server's copies go stale until manually re-copied. This is a
+  direct consequence of the server holding only four files rather than a
+  git clone (see Decision above) — there's no `git pull` step to make it
+  self-updating. Acceptable for now since these files change rarely; worth
+  revisiting (e.g. having `deploy.sh` fetch them, or CD `scp` them) if that
+  stops being true.

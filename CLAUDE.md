@@ -5,14 +5,19 @@ read it before doing anything non-trivial. This file just orients you.
 
 ## Where things live
 
-- `README.md` — how to run/deploy the stack (Docker Compose, local dev).
-- `infrastructure/` — `docker-compose.yml`, `Caddyfile`, `.env.example` for
-  the deployable stack (Postgres + api + Caddy).
+- `README.md` — how to run/deploy the stack (Docker Compose, local dev,
+  production).
+- `infrastructure/` — `docker-compose.yml`, `docker-compose.prod.yml`
+  (server-only GHCR image override, see ADR 0010), `Caddyfile`,
+  `deploy.sh`, `.env.example` for the deployable stack (Postgres + api +
+  Caddy).
+- `.github/workflows/` — CI (`ci.yml`, every PR + push) and CD
+  (`deploy.yml`, GHCR build-push + SSH deploy on `main` once CI is green).
 - `docs/domain.md` — the period/streak domain model, restated as prose. Read
   this before touching anything cadence- or streak-related.
-- `docs/phase-2-plan.md` / `docs/phase-3-plan.md` — working plans tracking
-  stage-by-stage status as each phase lands; check here for what's done vs.
-  still ahead.
+- `docs/phase-2-plan.md` / `docs/phase-3-plan.md` / `docs/phase-4-plan.md` —
+  working plans tracking stage-by-stage status as each phase lands; check
+  here for what's done vs. still ahead.
 - `docs/decisions/` — ADRs. One is required before any new dependency.
 - `docs/aspnet-conventions.md` — backend code organization conventions.
 - `docs/angular-conventions.md` — frontend code organization conventions.

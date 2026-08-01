@@ -80,6 +80,13 @@ See `docs/aspnet-conventions.md` for code organization. Beyond that:
 - `api/.dockerignore` must keep excluding `bin/`/`obj/` — otherwise a local
   build's artifacts get copied into the Docker image and clobber the
   container's own `dotnet restore`.
+- **The container runs as non-root** (`USER $APP_UID`, the .NET runtime
+  image's built-in user — see `api/Dockerfile`). If a new feature needs to
+  write to disk (temp files, more persisted state beyond the Data
+  Protection key ring), it needs its own directory created and `chown`ed to
+  `$APP_UID` in the Dockerfile first — `/keys` is the existing pattern to
+  copy. Writing to an arbitrary path will fail with
+  `UnauthorizedAccessException` at runtime, not at build time.
 
 ## Architectural non-goals
 
