@@ -19,6 +19,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddExceptionHandler<UniqueConstraintExceptionHandler>();
 builder.Services.AddProblemDetails();
 
+builder.Services.AddAppDataProtection(builder.Environment);
 builder.Services.AddAppAuthentication();
 
 builder.Services.AddScoped<ICurrentUserProvider, HttpCurrentUserProvider>();

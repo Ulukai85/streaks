@@ -70,32 +70,56 @@ the Angular proxy, but this is the first time it's same-origin through Caddy).
 
 ---
 
-## Stage 2 — Domain + TLS (Caddy automatic HTTPS)
+## Stage 2 — Domain + TLS
 
-**Status: Not started**
+**Status: Owned by the human — not a Claude Code implementation stage.**
 
-- Requires a real domain with a DNS `A`/`AAAA` record pointing at the Hetzner
-  box's public IP — **server/DNS-side task, not code** (see Stage 5).
-- Replace the Caddyfile's `:80` catch-all with the real domain name so Caddy's
-  automatic HTTPS (Let's Encrypt via ACME) issues and renews a certificate
-  without extra config; Caddy redirects HTTP → HTTPS by default once a domain
-  is configured.
-- Flip `Secure` on the refresh cookie to unconditionally true in this
-  topology if it isn't already purely environment-gated end to end (re-check
-  `AuthEndpoints.SetRefreshCookie`'s `!env.IsDevelopment()` still does the
-  right thing once "Production" means "real HTTPS domain" instead of
-  "Docker Compose over plain HTTP" — worth a manual `curl -v` confirmation
-  either way, not just a code read).
+Stage 1 confirmed the actual production topology: a **host-level Caddy**
+(outside Docker, not part of this repo) fronts the Hetzner box's public
+80/443 and reverse-proxies the real domain to `localhost:8080`, where the
+compose `caddy` service (this repo) serves the Angular build and proxies
+`/api/*`. `infrastructure/docker-compose.yml` already maps the compose Caddy
+to host port 8080, not 80/443 — this was already anticipated, not something
+Stage 2 needs to change.
 
-**Verify:** `curl -v https://<domain>/api/health` shows a valid cert chain,
-`curl -v http://<domain>/` redirects to `https://`, browser login flow works
-end to end over HTTPS with the refresh cookie visibly `Secure` in dev tools.
+That makes this stage's shape the same as Stage 5: server/DNS work the human
+does directly, recorded here (with the "why") so it doesn't need
+re-litigating.
+
+1. **TLS termination and ACME live at the host-level Caddy**, not the
+   compose `caddy` service — the host Caddy already reverse-proxies other
+   traffic on the box and owns 80/443; the compose Caddy keeps listening on
+   plain `:80` internally (mapped to host `8080`), reachable only via the
+   host Caddy's `reverse_proxy localhost:8080`.
+2. **`infrastructure/Caddyfile` requires no change** for this stage — it
+   doesn't need to know the domain name at all; only the host Caddy config
+   does.
+3. **The refresh cookie's `Secure` flag needs no code change.**
+   `AuthEndpoints.cs`'s `Secure = !env.IsDevelopment()` is already
+   unconditional in Production — confirmed directly via `curl` against the
+   Stage 1 deployment, which showed `secure` on the `Set-Cookie` header over
+   plain HTTP. What's left is an end-to-end verification once the real
+   domain is live: a browser won't send a `Secure` cookie back over plain
+   HTTP, so this can only be fully confirmed against the real domain, not
+   `curl` against localhost.
+4. **Server-side steps** (human does directly): point the domain's
+   `A`/`AAAA` record at the Hetzner IP; add a block to the host Caddyfile
+   (`your-domain.example { reverse_proxy localhost:8080 }`); reload/restart
+   the host Caddy; confirm Let's Encrypt issues a cert.
+
+**Verify:** `curl -v https://<domain>/api/health` shows a valid cert chain;
+`curl -v http://<domain>/` redirects to `https://`; browser login flow works
+end to end over HTTPS with the refresh cookie visibly `Secure` in dev tools
+and actually sent back on subsequent requests (the thing plain-HTTP `curl`
+testing in Stage 1 couldn't prove). No local/CI verification applies — there
+is no domain, host Caddy instance, or TLS cert available in dev to test
+against.
 
 ---
 
 ## Stage 3 — Data Protection key persistence
 
-**Status: Not started**
+**Status: Done**
 
 - Today, nothing calls `AddDataProtection()` explicitly, so ASP.NET Core falls
   back to its default key ring behavior — in a container this is not
