@@ -148,7 +148,7 @@ confirm the pre-restart access token is still accepted until its natural
 
 ## Stage 4 — Production secrets & closing the Postgres exposure
 
-**Status: Not started**
+**Status: Done**
 
 - Set real `SEED_USER_NAME`/`SEED_USER_PASSWORD` via the server's `.env`
   (never committed — `.env` is already gitignored per the existing Compose

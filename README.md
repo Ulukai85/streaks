@@ -19,6 +19,11 @@ cp .env.example .env   # adjust Postgres credentials if you want
 docker compose up --build -d
 ```
 
+`SEED_USER_NAME`/`SEED_USER_PASSWORD` in `.env` must be set before a fresh
+Postgres volume can boot — the API refuses to seed the initial user (and
+exits) without a `SEED_USER_PASSWORD` on an empty `Users` table (decision
+#12, `docs/phase-3-plan.md`). No default ships in `.env.example` on purpose.
+
 Three services come up on one Docker network:
 
 | Service    | Image                | Host port | Purpose                                |
