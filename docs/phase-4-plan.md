@@ -45,7 +45,7 @@ diff; stop after each for review — except Stage 5, which isn't a diff at all
 
 ## Stage 1 — Same-origin serving: Caddy serves the Angular build
 
-**Status: Not started**
+**Status: Done**
 
 - Add a multi-stage `web/Dockerfile`: a `node` build stage running `npm ci && npm run build`,
   then copy the built `dist/streaks/browser` output into a stage Caddy can serve
