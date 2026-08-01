@@ -283,23 +283,53 @@ attempts gets rate-limited before Identity's own lockout would trigger;
 
 ## Stage 6 — GitHub Actions: CI gate + CD on push to main
 
-**Status: Not started**
+**Status: Implemented, human-owned setup + verification pending.**
 
-- **ADR needed first** (project convention: architecture decision before
-  code, same rigor as ADR 0008 before Phase 3's auth work) — decide the
-  deploy mechanism: CI builds and pushes images to a registry (e.g. GHCR)
-  and the server pulls, vs. the server builds directly from a `git pull` +
-  `docker compose up --build` triggered over SSH. Depends on what Stage 5
-  decides about the deploy credential's shape and privilege.
-- **CI (every PR + push):** `dotnet test`, `ng test`, `ng lint`, `ng build`.
-  Branch protection on `main` requiring these before merge.
-- **CD (push to main, after CI is green):** deploy to the Hetzner box per
-  the ADR's chosen mechanism. Uses a deploy credential scoped as narrowly as
-  Stage 5 decided (a GitHub Actions secret, not a broadly-privileged key).
+ADR 0010 (`docs/decisions/0010-deploy-mechanism.md`) records the deploy
+mechanism decision: CI builds `api`/`caddy` images and pushes them to GHCR
+(public, no server-side pull credential needed); `.github/workflows/deploy.yml`
+triggers via `workflow_run` on CI going green on `main` (not a parallel
+`push` trigger, so it can't race ahead of CI), then SSHes in and runs
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml pull && up
+-d`. Deploy is fully automatic, rollback is manual for now (SSH in, pull a
+previous `:<commit-sha>` tag) — see the ADR's Rationale for why each of
+these was chosen over the alternative.
+
+- `.github/workflows/ci.yml` — `api` and `web` jobs in parallel, every PR +
+  push to `main`: `dotnet test` (Testcontainers, ADR 0003), `ng lint`,
+  `ng test` (Angular's Vitest-based `@angular/build:unit-test`, not Karma —
+  confirmed by reading `angular.json`), `ng build`. Also an informational
+  `dotnet list package --vulnerable` step (Stage 5 decision #13).
+- `.github/workflows/deploy.yml` — builds+pushes both images, then the SSH
+  deploy step. Third-party actions SHA-pinned, GitHub-owned ones tag-pinned
+  (ADR 0010).
+- `infrastructure/docker-compose.prod.yml` (new) — server-only override
+  pointing `api`/`caddy` at the pushed GHCR images; local dev's
+  `docker compose up --build` is untouched (base file unchanged).
+- `infrastructure/deploy.sh` (new) — the actual pull + `up -d` script,
+  version-controlled here. `deploy.yml`'s SSH step just invokes
+  `/home/deploy/deploy.sh` — the `deploy` SSH user's key is restricted to a
+  forced command in `authorized_keys` (`command="/home/deploy/deploy.sh"`),
+  so this is the only thing that key can ever run regardless of what's
+  sent. The app lives at `/opt/streaks` on the server (FHS convention for
+  self-installed software) — `deploy.sh` assumes that path.
+
+**Still needed (human, not code — see the plan's "Human-owned setup"):**
+add `DEPLOY_HOST`/`DEPLOY_USER` (`deploy`)/`DEPLOY_SSH_KEY` repo secrets;
+configure branch protection on `main` requiring the `api`/`web` CI checks;
+confirm the two GHCR packages are public after the first push; enable
+Dependabot alerts for npm + NuGet. **Also needed:** clone/place the repo at
+`/opt/streaks` on the server; copy `infrastructure/deploy.sh` to
+`/home/deploy/deploy.sh` and `chmod +x` it; add the `command="/home/deploy/deploy.sh"`
+restriction to the deploy key's line in `~deploy/.ssh/authorized_keys`.
+Keep the server-side copy of `deploy.sh` in sync by hand if the
+repo-tracked version ever changes — CI doesn't push it automatically.
 
 **Verify:** a trivial change pushed to `main` is live on the domain within
 the pipeline's run time; a deliberately failing test on a PR blocks the merge
-and never reaches the deploy job.
+and never reaches the deploy job. (Not run by Claude Code this stage — see
+the plan file's verification checklist; needs a real push to the GitHub
+remote and a real server.)
 
 ---
 

@@ -42,6 +42,11 @@ curl http://localhost:8080/api/health
 Tear down with `docker compose down` (add `-v` to also drop the Postgres
 volume).
 
+`infrastructure/docker-compose.prod.yml` is a server-only override that
+points `api`/`caddy` at pre-built GHCR images instead of building locally —
+see ADR 0010. It's never used in local dev; the commands above are
+unaffected.
+
 ## Local development (without full containerization)
 
 **Backend** — `cd api/Api && dotnet run`. Uses the connection string in

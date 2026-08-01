@@ -1,0 +1,5 @@
+services:
+  api:
+    image: ghcr.io/ulukai85/streaks-api:latest
+  caddy:
+    image: ghcr.io/ulukai85/streaks-web:latest

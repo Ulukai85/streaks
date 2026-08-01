@@ -1,0 +1,75 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # docker/setup-buildx-action@v4.2.0
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+
+      # docker/login-action@v4.6.0
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # docker/build-push-action@v7.3.0
+      - name: Build and push api image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: api
+          push: true
+          tags: |
+            ghcr.io/ulukai85/streaks-api:latest
+            ghcr.io/ulukai85/streaks-api:${{ github.event.workflow_run.head_sha }}
+
+      # docker/build-push-action@v7.3.0
+      - name: Build and push web/caddy image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: web
+          push: true
+          tags: |
+            ghcr.io/ulukai85/streaks-web:latest
+            ghcr.io/ulukai85/streaks-web:${{ github.event.workflow_run.head_sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # appleboy/ssh-action@v1.2.5
+      #
+      # The deploy user's SSH key is restricted server-side to a forced command
+      # (`command="/home/deploy/deploy.sh"` in ~deploy/.ssh/authorized_keys) - whatever
+      # is sent below is what the server actually runs, but it's written out explicitly
+      # so the workflow isn't misleading about what happens. deploy.sh itself is tracked
+      # at infrastructure/deploy.sh; the server-side copy at /home/deploy/deploy.sh is
+      # what the forced command actually points at.
+      - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: /home/deploy/deploy.sh
