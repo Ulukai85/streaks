@@ -50,7 +50,8 @@ public static class AuthEndpoints
             SetRefreshCookie(httpContext, rawRefreshToken, refreshToken.ExpiresAt, env);
 
             return TypedResults.Ok(new LoginResponse(accessToken, expiresAt));
-        }).AddEndpointFilter<ValidationFilter<LoginRequest>>();
+        }).AddEndpointFilter<ValidationFilter<LoginRequest>>()
+            .RequireRateLimiting(RateLimitingServiceCollectionExtensions.LoginPolicy);
 
         group.MapPost("/refresh", async Task<Results<Ok<LoginResponse>, ProblemHttpResult>> (
             HttpContext httpContext,

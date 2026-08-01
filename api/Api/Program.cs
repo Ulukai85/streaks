@@ -21,6 +21,7 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddAppDataProtection(builder.Environment);
 builder.Services.AddAppAuthentication();
+builder.Services.AddAppRateLimiting(builder.Environment);
 
 builder.Services.AddScoped<ICurrentUserProvider, HttpCurrentUserProvider>();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -37,6 +38,8 @@ await app.MigrateAndSeedAsync();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

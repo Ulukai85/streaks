@@ -189,61 +189,88 @@ discussion before any server work started — recorded here (with the "why")
 so it doesn't need re-litigating, same as any other decision in this repo's
 plans:
 
-1. **SSH: key-only, no password auth.** The private key lives on the human's
-   own PC, passphrase-protected — a bare unencrypted key would mean anyone
-   with read access to that machine (malware, theft, a stray sync/backup)
-   gets immediate server access with no second factor; the passphrase closes
-   that gap. `PasswordAuthentication no` in `sshd_config`.
-2. **Dedicated non-root deploy user**, not root, for both CD and routine
-   admin access — bounds the blast radius if the deploy credential (#5) or
-   the human's own session is ever compromised.
-3. **Postgres port fix:** bind `127.0.0.1:5433:5432` in
-   `infrastructure/docker-compose.yml` (Stage 4) rather than dropping the
-   mapping — keeps host-side `psql` access for one-off debugging while
-   making the bind itself (not just a firewall rule) the thing that blocks
-   external reachability, i.e. still safe even if the firewall layer below
-   has a gap.
-4. **Firewall: layered.** Hetzner Cloud Firewall (outside the box) *and*
-   `ufw` (inside the box), both allowing only 22/80/443 — defense in depth,
-   so a misconfiguration in one layer doesn't fully expose the box on its
-   own.
-5. **Deploy secret: a scoped, deploy-only SSH key**, not the human's personal
-   key — generated specifically for CI, authorized only for the deploy
-   user's limited actions (#2). If the GitHub Actions secret ever leaks, the
-   damage is bounded to "can deploy," not "has the human's own account."
-6. **Docker image versions pinned to exact tags** (e.g. `postgres:18.1-alpine`,
-   not `postgres:18-alpine`) in `infrastructure/docker-compose.yml` — a
-   redeploy never silently pulls a newer, untested image.
-7. **`fail2ban` (or equivalent) on SSH** — standard mitigation against
-   credential-guessing once the box has a public IP that will get scanned,
-   independent of #1 already being key-only.
-8. **Automatic OS security updates enabled from day one** (e.g.
-   `unattended-upgrades` on Debian/Ubuntu) — not deferred as a "get to it
-   later."
-9. **Rate limiter in front of `POST /api/auth/login`**, on top of Identity's
-   existing lockout policy (Phase 3 decision #10) — lockout alone only
-   protects one *known* account from repeated guesses; a rate limiter
-   mitigates broader credential-stuffing traffic against the endpoint.
-   ASP.NET Core's built-in rate-limiting middleware — no new dependency, no
-   ADR needed.
-10. **Security headers added now, not deferred** — HSTS, CSP,
-    `X-Content-Type-Options`, `Referrer-Policy`, frame-ancestors, a few lines
-    in the Caddyfile while it's already being touched for Stages 1–2.
-11. **Seeded username chosen to not be guessable** — not `dev`/`admin`/the
-    obvious default once this is a real Production credential (the account
-    itself already isn't enumerable, per Phase 3's generic 401 message, but
-    an unguessable username removes the easier first guess entirely).
-12. **`.env` on the server: minimal file permissions** (owner-read-only,
-    owned by the deploy user — not group/world-readable) — holds
-    `SEED_USER_PASSWORD`/`POSTGRES_PASSWORD` in plaintext, so filesystem
-    permissions are the only thing standing between "any account on the box"
-    and full credential access.
-13. **Dependency/image scanning** — `dotnet list package --vulnerable`
-    alongside the existing `npm audit` tracking
-    (`docs/existing-problems.md`), GitHub Dependabot alerts, optionally
-    image scanning (e.g. Trivy) in CI. Not gone through the same one-by-one
-    discussion as #1–12 above; revisit before Stage 6 if it needs its own
-    pass.
+1. **Done (human).** **SSH: key-only, no password auth.** The private key
+   lives on the human's own PC, passphrase-protected — a bare unencrypted
+   key would mean anyone with read access to that machine (malware, theft,
+   a stray sync/backup) gets immediate server access with no second factor;
+   the passphrase closes that gap. `PasswordAuthentication no` in
+   `sshd_config`.
+2. **Done (human).** **Dedicated non-root deploy user**, not root, for both
+   CD and routine admin access — bounds the blast radius if the deploy
+   credential (#5) or the human's own session is ever compromised.
+3. **Done (Stage 4).** **Postgres port fix:** bind `127.0.0.1:5433:5432` in
+   `infrastructure/docker-compose.yml` — keeps host-side `psql` access for
+   one-off debugging while making the bind itself (not just a firewall
+   rule) the thing that blocks external reachability, i.e. still safe even
+   if the firewall layer below has a gap. Landed as part of Stage 4, not a
+   separate action.
+4. **Done (human).** **Firewall: layered.** Hetzner Cloud Firewall (outside
+   the box) *and* `ufw` (inside the box), both allowing only 22/80/443 —
+   defense in depth, so a misconfiguration in one layer doesn't fully
+   expose the box on its own.
+5. **Done (human).** **Deploy secret: a scoped, deploy-only SSH key**, not
+   the human's personal key — generated specifically for CI, authorized
+   only for the deploy user's limited actions (#2). If the GitHub Actions
+   secret ever leaks, the damage is bounded to "can deploy," not "has the
+   human's own account."
+6. **Done.** **Docker image versions pinned to exact tags** — checked what
+   was actually running (not assumed) so pinning didn't silently become an
+   upgrade: `postgres:18-alpine` → `postgres:18.4-alpine`, `caddy:2-alpine`
+   → `caddy:2.11.4-alpine` (`web/Dockerfile`),
+   `mcr.microsoft.com/dotnet/aspnet:10.0` → `...:10.0.10` (`api/Dockerfile`).
+   `dotnet/sdk:10.0.302` and `node:24.18.0-alpine` were already exact-pinned
+   from earlier stages.
+7. **Done (human).** **`fail2ban` (or equivalent) on SSH** — standard
+   mitigation against credential-guessing once the box has a public IP
+   that will get scanned, independent of #1 already being key-only.
+8. **Done (human).** **Automatic OS security updates enabled from day one**
+   (e.g. `unattended-upgrades` on Debian/Ubuntu) — not deferred as a "get
+   to it later."
+9. **Done.** **Rate limiter in front of `POST /api/auth/login`**, on top of
+   Identity's existing lockout policy (Phase 3 decision #10) — lockout
+   alone only protects one *known* account from repeated guesses; a rate
+   limiter mitigates broader credential-stuffing traffic against the
+   endpoint. Implemented as a **global** (not per-IP) fixed-window limiter
+   (`Api/Infrastructure/RateLimitingServiceCollectionExtensions.cs`,
+   10 requests/minute) — the request path has two proxy hops (host Caddy →
+   compose Caddy → `api`) and nothing trusts `X-Forwarded-For` yet, so
+   per-IP partitioning would need `ForwardedHeadersMiddleware` + trusted-
+   proxy config to avoid spoofing; a global cap was judged sufficient for a
+   single-account app. ASP.NET Core's built-in rate-limiting middleware —
+   no new dependency, no ADR needed. **Enforced only outside Development**
+   (`environment.IsDevelopment()` gate, same pattern as the `Secure` cookie
+   and Data Protection persistence) — found during verification that
+   `IntegrationTestBase.InitializeAsync` logs in through this exact endpoint
+   for every single test, which blew straight through a real 10/min cap and
+   failed 7 tests; Development still runs unlimited, Production/Docker
+   Compose (where `ASPNETCORE_ENVIRONMENT` is always `Production`) still
+   gets the real limit.
+10. **Done — 4 of 5.** **Security headers** — HSTS,
+    `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` added to
+    `infrastructure/Caddyfile`. **CSP deferred**, tracked in
+    `docs/existing-problems.md`: the built `index.html` has an inline
+    `<style>`/`onload` from Angular's automatic critical-CSS inlining, so a
+    compatible CSP would need `'unsafe-inline'` on `script-src`, defeating
+    most of its point — doing it properly needs an `web/angular.json`
+    build-config change first.
+11. **Open — human action, mechanism already exists.** **Seeded username
+    chosen to not be guessable** — not `dev`/`admin`/the obvious default
+    once this is a real Production credential (the account itself already
+    isn't enumerable, per Phase 3's generic 401 message, but an unguessable
+    username removes the easier first guess entirely). Stage 4 already
+    wired `SEED_USER_NAME` through to the container; only picking and
+    setting the actual value in the real server `.env` remains.
+12. **Open — human action.** **`.env` on the server: minimal file
+    permissions** (owner-read-only, owned by the deploy user — not
+    group/world-readable) — holds `SEED_USER_PASSWORD`/`POSTGRES_PASSWORD`
+    in plaintext, so filesystem permissions are the only thing standing
+    between "any account on the box" and full credential access.
+13. **Open — deferred to Stage 6.** **Dependency/image scanning** —
+    `dotnet list package --vulnerable` alongside the existing `npm audit`
+    tracking (`docs/existing-problems.md`), GitHub Dependabot alerts,
+    optionally image scanning (e.g. Trivy) in CI. Not gone through the same
+    one-by-one discussion as #1–12 above; revisit before Stage 6 if it
+    needs its own pass.
 
 **Verify:** `nmap`/external `curl` against the Hetzner IP shows only
 22/80/443 reachable; SSH password auth attempt is rejected; `ssh` as the

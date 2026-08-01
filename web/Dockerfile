@@ -7,5 +7,5 @@ RUN npm config set fetch-timeout 600000 fetch-retries 5 \
 COPY . .
 RUN npm run build
 
-FROM caddy:2-alpine
+FROM caddy:2.11.4-alpine
 COPY --from=build /app/dist/streaks/browser /srv
