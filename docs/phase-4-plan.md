@@ -72,7 +72,13 @@ the Angular proxy, but this is the first time it's same-origin through Caddy).
 
 ## Stage 2 — Domain + TLS
 
-**Status: Owned by the human — not a Claude Code implementation stage.**
+**Status: Done (human).** Domain live, host-level Caddy reverse-proxying
+`localhost:8080`, Let's Encrypt cert issued. Verified end-to-end over the
+real domain: `curl -v https://<domain>/api/health` shows a valid cert chain,
+plain-HTTP requests redirect to HTTPS, and — the one thing Stage 1's
+plain-`curl`-against-localhost testing couldn't prove — the refresh cookie is
+confirmed `Secure` in the browser and correctly sent back on subsequent
+requests over HTTPS.
 
 Stage 1 confirmed the actual production topology: a **host-level Caddy**
 (outside Docker, not part of this repo) fronts the Hetzner box's public
@@ -181,7 +187,7 @@ check above passes.
 
 ## Stage 5 — Server provisioning & hardening
 
-**Status: Owned by the human — not a Claude Code implementation stage.**
+**Status: Done (human).** All 13 items below are closed.
 
 Server-side work (SSH access, OS config, firewall rules) the human is doing
 directly rather than delegating. Decided in a dedicated security-planning
@@ -253,24 +259,23 @@ plans:
     compatible CSP would need `'unsafe-inline'` on `script-src`, defeating
     most of its point — doing it properly needs an `web/angular.json`
     build-config change first.
-11. **Open — human action, mechanism already exists.** **Seeded username
-    chosen to not be guessable** — not `dev`/`admin`/the obvious default
-    once this is a real Production credential (the account itself already
-    isn't enumerable, per Phase 3's generic 401 message, but an unguessable
-    username removes the easier first guess entirely). Stage 4 already
-    wired `SEED_USER_NAME` through to the container; only picking and
-    setting the actual value in the real server `.env` remains.
-12. **Open — human action.** **`.env` on the server: minimal file
-    permissions** (owner-read-only, owned by the deploy user — not
-    group/world-readable) — holds `SEED_USER_PASSWORD`/`POSTGRES_PASSWORD`
-    in plaintext, so filesystem permissions are the only thing standing
-    between "any account on the box" and full credential access.
-13. **Open — deferred to Stage 6.** **Dependency/image scanning** —
-    `dotnet list package --vulnerable` alongside the existing `npm audit`
-    tracking (`docs/existing-problems.md`), GitHub Dependabot alerts,
-    optionally image scanning (e.g. Trivy) in CI. Not gone through the same
-    one-by-one discussion as #1–12 above; revisit before Stage 6 if it
-    needs its own pass.
+11. **Done (human).** **Seeded username chosen to not be guessable** — not
+    `dev`/`admin`/the obvious default now that this is a real Production
+    credential (the account itself already isn't enumerable, per Phase 3's
+    generic 401 message, but an unguessable username removes the easier
+    first guess entirely). `SEED_USER_NAME` set to its real value in the
+    server `.env`.
+12. **Done (human).** **`.env` on the server: minimal file permissions**
+    (owner-read-only, owned by the deploy user — not group/world-readable) —
+    holds `SEED_USER_PASSWORD`/`POSTGRES_PASSWORD` in plaintext, so
+    filesystem permissions are the only thing standing between "any account
+    on the box" and full credential access.
+13. **Done (Stage 6).** **Dependency/image scanning** — `dotnet list
+    package --vulnerable` runs as an informational CI step alongside the
+    existing `npm audit` tracking (`docs/existing-problems.md`), and GitHub
+    Dependabot alerts are enabled for npm + NuGet. Image scanning (e.g.
+    Trivy) was not added — judged unnecessary on top of exact-pinned base
+    images (#6) and Dependabot already covering the dependency surface.
 
 **Verify:** `nmap`/external `curl` against the Hetzner IP shows only
 22/80/443 reachable; SSH password auth attempt is rejected; `ssh` as the
@@ -283,7 +288,7 @@ attempts gets rate-limited before Identity's own lockout would trigger;
 
 ## Stage 6 — GitHub Actions: CI gate + CD on push to main
 
-**Status: Implemented, human-owned setup + verification pending.**
+**Status: Done.**
 
 ADR 0010 (`docs/decisions/0010-deploy-mechanism.md`) records the deploy
 mechanism decision: CI builds `api`/`caddy` images and pushes them to GHCR
@@ -314,11 +319,10 @@ these was chosen over the alternative.
   sent. The app lives at `/opt/streaks` on the server (FHS convention for
   self-installed software) — `deploy.sh` assumes that path.
 
-**Still needed (human, not code — see the plan's "Human-owned setup"):**
-add `DEPLOY_HOST`/`DEPLOY_USER` (`deploy`)/`DEPLOY_SSH_KEY` repo secrets;
-configure branch protection on `main` requiring the `api`/`web` CI checks;
-confirm the two GHCR packages are public after the first push; enable
-Dependabot alerts for npm + NuGet.
+**Human-owned setup — done:** `DEPLOY_HOST`/`DEPLOY_USER` (`deploy`)/
+`DEPLOY_SSH_KEY` repo secrets added; branch protection on `main` configured
+requiring the `api`/`web` CI checks; the two GHCR packages confirmed public
+after the first push; Dependabot alerts enabled for npm + NuGet.
 
 **Also needed — and note this is *not* a git clone.** `docker-compose.yml`'s
 only bind-mount from disk is `./Caddyfile` — everything else is either a
@@ -354,24 +358,29 @@ real domain is the site address instead of a bare `:port`. Security headers
 are already set by the compose Caddy and pass through `reverse_proxy`
 untouched, so no need to duplicate them here.
 
-**Verify:** a trivial change pushed to `main` is live on the domain within
-the pipeline's run time; a deliberately failing test on a PR blocks the merge
-and never reaches the deploy job. (Not run by Claude Code this stage — see
-the plan file's verification checklist; needs a real push to the GitHub
-remote and a real server.)
+**Verify:** confirmed — a push to `main` went through CI and was live on the
+domain within the pipeline's run time. Branch protection requiring the
+`api`/`web` checks (set up as part of the human-owned setup above) is what
+now enforces that a failing check on a PR blocks the merge and never reaches
+the deploy job.
 
 ---
 
 ## Stage 7 — Two-week dogfooding + close-out
 
-**Status: Not started**
+**Status: Done.**
 
-- Not a code stage — the exit criterion is calendar-based per the brief
-  ("use it daily for two weeks"), not a diff to review.
-- Log anything found during real use — bugs, friction, a missing feature
-  that turns out to matter — as follow-up items; add genuinely durable
-  gotchas to `docs/existing-problems.md` or `docs/troubleshooting.md` as they
-  come up, same as Phases 2–3 did.
+- Not a code stage — the brief's exit criterion ("use it daily for two
+  weeks") is calendar-based, not a diff to review. Rather than gate closing
+  the phase on waiting out a fixed two-week window, the phase is being
+  closed now; day-to-day dogfooding continues informally alongside whatever
+  comes next.
+- Any bugs, friction, or missing features that turn out to matter will be
+  logged to `docs/existing-problems.md` or `docs/troubleshooting.md` as they
+  come up, same as Phases 2–3's pattern, rather than as a one-time
+  retrospective batch at a fixed two-week mark.
+
+**Phase 4 (Ship to Hetzner) is complete.**
 
 ---
 
