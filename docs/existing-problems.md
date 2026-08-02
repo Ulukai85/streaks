@@ -37,6 +37,16 @@ override an exact pin `nx` explicitly declared, with unclear compatibility
 consequences for a package we don't meaningfully exercise. Not worth it for
 a dev-only, unreachable vulnerability.
 
+**Dependabot confirmation (2026-08-02):** after enabling Dependabot, it
+reached the same conclusion independently. It auto-opened a fix PR for
+`axios`, but reported `@hono/node-server` and `brace-expansion` as
+non-auto-fixable for the reasons already documented above (the only
+available paths require downgrading `@angular/cli` from 22.0.8 to 21.0.4,
+or updating `@spartan-ng/cli`'s pinned Nx/`minimatch` chain). Both alerts
+were dismissed on GitHub as tolerable risk, pointing back to this entry.
+Earliest fixed versions per Dependabot, for reference when revisiting:
+`@hono/node-server@2.0.10`, `brace-expansion@2.1.3`.
+
 ## No `Content-Security-Policy` header (Stage 5, decision #10)
 
 **Symptom:** `infrastructure/Caddyfile` sets `Strict-Transport-Security`,
