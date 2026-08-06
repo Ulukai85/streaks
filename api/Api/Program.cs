@@ -22,6 +22,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddAppDataProtection(builder.Environment);
 builder.Services.AddAppAuthentication();
 builder.Services.AddAppRateLimiting(builder.Environment);
+builder.Services.AddAppOpenTelemetry();
 
 builder.Services.AddScoped<ICurrentUserProvider, HttpCurrentUserProvider>();
 builder.Services.AddSingleton(TimeProvider.System);

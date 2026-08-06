@@ -26,6 +26,13 @@ services:
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
       SEED_USER_NAME: ${SEED_USER_NAME}
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD}
+      # Grafana Alloy runs on the host, not in Compose (ADR 0011) - api's own "localhost" is its
+      # own network namespace on the default bridge network, so it must reach the host via
+      # host.docker.internal instead (the extra_hosts entry below maps that to the host gateway).
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
+      OTEL_SERVICE_NAME: streaks-api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
