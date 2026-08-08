@@ -31,6 +31,8 @@ builder.Services.AddScoped<IValidator<CompleteChallengeRequest>, CompleteChallen
 builder.Services.AddScoped<IValidator<LoginRequest>, LoginRequestValidator>();
 builder.Services.AddScoped<RefreshTokenIssuer>();
 
+builder.WebHost.AddSentry();
+
 var app = builder.Build();
 
 await app.MigrateAndSeedAsync();

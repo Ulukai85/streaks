@@ -30,7 +30,10 @@ stages, which aren't diffs at all (same pattern as Phase 4's Stages 2/5).
 
 ## Stage A — Accounts & access provisioning (human-owned)
 
-**Status: Not started.**
+**Status: Partially done (2026-08-08) — Grafana Cloud account (from Stage
+B) and two Sentry free-tier projects (`streaks-api`, `streaks-web`) exist
+with DSNs generated. Backblaze B2 account/bucket/key and a free-tier
+uptime checker still outstanding — pick up when Stage D starts.**
 
 - Create a Grafana Cloud free-tier account/stack; generate an Alloy
   connection config (endpoint + API key) for metrics/logs/traces.
@@ -136,16 +139,55 @@ above showed up as their own labeled stream in Loki Explore.
 
 ## Stage C — Sentry: error tracking (api + web)
 
-**Status: Not started.**
+**Status: Done (2026-08-08).**
 
-- Add the Sentry .NET SDK to `api`, wired for unhandled exceptions.
-- Add the Sentry Angular SDK to `web`, wired for unhandled errors.
-- DSNs sourced from Stage A, following the existing env-var-for-secrets
-  pattern (`SEED_USER_PASSWORD`/`POSTGRES_PASSWORD` in `.env`) rather than
-  hardcoding.
+- Two separate Sentry projects (rather than one split by component — the
+  other option Stage A had left open): `streaks-api` (.NET platform) and
+  `streaks-web` (Angular platform), each with their own DSN.
+- api: `Sentry.AspNetCore` added via `api/Directory.Packages.props` +
+  `api/Api/Api.csproj`; wired in
+  `api/Api/Infrastructure/SentryWebHostExtensions.cs`
+  (`AddSentry(this IWebHostBuilder, IConfiguration, IHostEnvironment)`,
+  called from `api/Api/Program.cs` as `builder.WebHost.AddSentry(...)`).
+  DSN sourced from `Sentry__Dsn` env var → `infrastructure/docker-compose.yml`
+  → `infrastructure/.env.example`'s new blank `SENTRY_DSN=`, same pattern
+  as `SEED_USER_PASSWORD`/`ConnectionStrings__Postgres`. No performance
+  tracing (`TracesSampleRate` deliberately not set) and no PII collection
+  (`SendDefaultPii` left at its default `false`) — scope is error tracking
+  only, per ADR 0011.
+- web: `@sentry/angular` added to `web/package.json`. `Sentry.init({ dsn:
+  environment.sentryDsn })` in `web/src/main.ts`, called before
+  `bootstrapApplication(...)`. `ErrorHandler` provider
+  (`Sentry.createErrorHandler()`) registered in `web/src/app/app.config.ts`,
+  composing with the existing `provideBrowserGlobalErrorListeners()` so
+  both Angular-caught and uncaught browser-level errors reach Sentry
+  through the one path. DSN is a build-time value in
+  `web/src/environments/environment.ts` (blank in
+  `environment.development.ts`, so local dev sends nothing) — safe to
+  commit since a Sentry DSN is meant to be client-embeddable, same trust
+  level as the already-committed `apiUrl`. No tracing integration/
+  `TraceService` wiring — same error-tracking-only scope as the api side.
 
-**Verify:** a deliberately thrown test exception in each of `api` and `web`
-appears in the corresponding Sentry project.
+**Verify:** confirmed 2026-08-08 — a deliberately thrown test exception in
+`api` (temporary `/api/sentry-test` endpoint, removed after confirming)
+appeared in the `streaks-api` Sentry project; a deliberately thrown error
+from a temporary "Test Sentry Error" button in `web/src/app/app.ts`
+appeared in the `streaks-web` Sentry project after resolving the gotcha
+below. Both temporary test triggers were removed from the code once
+verified.
+
+**Gotchas hit during setup:**
+
+- **Browser adblockers/privacy extensions silently drop Sentry's web
+  events.** `*.ingest.*.sentry.io` is a common blocklist target (uBlock
+  Origin, Brave Shields, Privacy Badger, etc.) — during verification the
+  test button's error never reached Sentry until the adblocker was
+  disabled; the Network tab showed the ingest request as
+  `(blocked)`/`net::ERR_BLOCKED_BY_CLIENT`. Not fixable from the app side
+  and not unique to this app — accept that `streaks-web`'s error count
+  will always undercount real errors for adblocker-using visitors, same
+  as any client-side error tracker. Worth remembering if `streaks-web`
+  ever looks suspiciously quiet compared to `streaks-api`.
 
 ---
 
