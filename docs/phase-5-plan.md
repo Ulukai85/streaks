@@ -31,9 +31,10 @@ stages, which aren't diffs at all (same pattern as Phase 4's Stages 2/5).
 ## Stage A — Accounts & access provisioning (human-owned)
 
 **Status: Partially done (2026-08-08) — Grafana Cloud account (from Stage
-B) and two Sentry free-tier projects (`streaks-api`, `streaks-web`) exist
-with DSNs generated. Backblaze B2 account/bucket/key and a free-tier
-uptime checker still outstanding — pick up when Stage D starts.**
+B), two Sentry free-tier projects (`streaks-api`, `streaks-web`), and the
+Backblaze B2 account/bucket/key (Stage D) all exist. A free-tier uptime
+checker is still outstanding — unrelated to any single stage, pick up
+whenever.**
 
 - Create a Grafana Cloud free-tier account/stack; generate an Alloy
   connection config (endpoint + API key) for metrics/logs/traces.
@@ -193,20 +194,73 @@ verified.
 
 ## Stage D — Backups: `restic` → B2, with a verified restore
 
-**Status: Not started.**
+**Status: Done (2026-08-08).**
 
-- `pg_dump` (logical dump, not raw volume files — see ADR 0011 Rationale)
-  piped through `restic` to the B2 bucket from Stage A, on a systemd timer
-  (not cron — see ADR 0011).
+- New `infrastructure/backup/` directory, following the same
+  templated-reference-copy pattern Stage B set for
+  `infrastructure/alloy/config.alloy`: real secrets/config only ever exist
+  on the host, never committed.
+  - `backup.sh` — `docker compose exec`s into the running `postgres`
+    container for `pg_dump -Fc` (custom format, matches the server's actual
+    Postgres version instead of a separately-maintained host `pg_dump`),
+    streams it straight into `restic backup --stdin` (no intermediate file),
+    then `restic forget --prune --keep-daily 7 --keep-weekly 4
+    --keep-monthly 6`.
+  - `streaks-backup.service` / `streaks-backup.timer` — a `oneshot` systemd
+    service run daily at 03:00 (`Persistent=true`), not cron — see ADR 0011.
+  - `restore-drill.sh` — restores a snapshot into a throwaway
+    `postgres:18.4-alpine` container (never touches the real `postgres`
+    container/volume) via `restic dump | pg_restore`, then prints row counts
+    on `Users`/`Challenges`/`Completions`/`RefreshTokens` for a human
+    sanity-check. Written to be re-run for ADR 0011's recommended periodic
+    (monthly) re-verification, not just this one-time proof.
+  - `.env.example` — blank `RESTIC_REPOSITORY`/`RESTIC_PASSWORD`/
+    `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`/`POSTGRES_USER`/
+    `POSTGRES_DB` placeholders; the real file lives only at
+    `/opt/streaks/backup/.env` (mode 600, root-only) on the VM. Uses B2's
+    S3-compatible API rather than restic's native `b2:` backend — restic's
+    own docs currently advise against the native backend.
 - **Mandatory, not optional:** actually run a `pg_restore` against a scratch
   database from a B2-fetched backup, and document the result — this is the
   gap Phase 4 explicitly deferred here rather than allowing an unverified
   cron job.
+- Stage A's outstanding B2 bucket/key and a restic repository password were
+  provisioned, `streaks-backup.timer` is enabled and produced a real
+  snapshot in B2, and `restore-drill.sh` was run against that snapshot —
+  restored cleanly into a scratch container, row counts on
+  `Users`/`Challenges`/`Completions`/`RefreshTokens` matched expectations.
 
-**Verify:** the systemd timer fires and produces a new snapshot in B2 on
-schedule; a real restore drill against a scratch database succeeds and is
-recorded (date + outcome) somewhere durable (this file, once done, or
-`docs/existing-problems.md` if a gotcha turns up).
+**Verify:** confirmed 2026-08-08 — `systemctl list-timers` shows
+`streaks-backup.timer` scheduled; `restic snapshots` lists a real snapshot
+from a timer-triggered run; `restore-drill.sh` against that snapshot
+restored successfully with sane row counts. Re-run `restore-drill.sh`
+periodically (ADR 0011 recommends monthly) so the "verified" claim doesn't
+go stale.
+
+**Gotchas hit during setup:**
+
+- **restic's own docs currently advise against its native `b2:` backend**
+  ("issues with the current B2 library") — used B2's S3-compatible API
+  instead (`RESTIC_REPOSITORY=s3:https://s3.<region>.backblazeb2.com/
+  <bucket>`, generic `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` env vars
+  set to the B2 application key's `keyID`/`applicationKey`), which also
+  means no `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY` vars despite what an earlier
+  draft of this stage (and ADR 0011's Rationale wording) implied.
+- **`source backup.sh` (instead of running it) took down the SSH session.**
+  `source` runs a script in the *current* shell rather than a child
+  process, so `backup.sh`'s `set -euo pipefail` plus its `: "${VAR:?msg}"`
+  guard clauses applied to the login shell itself — an unset
+  `RESTIC_REPOSITORY` triggered the guard, which exited the SSH session
+  outright rather than just the script. Run it (`bash backup.sh` or via
+  `systemctl start streaks-backup.service`), don't source it.
+- **A restic-backed snapshot is not browsable as a plain file in the B2 web
+  console.** restic splits/deduplicates/encrypts everything into
+  content-addressed pack files under opaque hash-named paths — there's no
+  visible `streaks.dump` object to click on. The only way to confirm
+  content is through `restic` itself (`restic ls latest`, `restic dump
+  latest streaks.dump`, or a full `restore-drill.sh` run) — worth
+  remembering so an empty-looking bucket browser isn't mistaken for a
+  broken backup.
 
 ---
 
@@ -258,6 +312,8 @@ before implementation.
   (Stage E).
 - `web/angular.json` — `inlineCritical: false` (Stage E).
 - `docs/existing-problems.md` — CSP entry to close out (Stage E).
+- `infrastructure/backup/` — `backup.sh`, `streaks-backup.service`,
+  `streaks-backup.timer`, `restore-drill.sh`, `.env.example` (Stage D).
 
 ## Process notes for execution
 
