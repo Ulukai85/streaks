@@ -27,6 +27,14 @@ public class DatabaseHarnessTests(PostgresFixture postgres, ApiFactory factory) 
     }
 
     [Fact]
+    public async Task Health_Endpoint_Accepts_Head_Requests()
+    {
+        var response = await Client.SendAsync(new HttpRequestMessage(HttpMethod.Head, "/api/health/"));
+
+        response.IsSuccessStatusCode.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task ResetDatabaseAsync_RemovesChallenges()
     {
         await using var db = CreateDbContext();
