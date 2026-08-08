@@ -47,6 +47,44 @@ were dismissed on GitHub as tolerable risk, pointing back to this entry.
 Earliest fixed versions per Dependabot, for reference when revisiting:
 `@hono/node-server@2.0.10`, `brace-expansion@2.1.3`.
 
+## Server infra config files aren't synced by CI/CD
+
+**Symptom:** a change to `infrastructure/docker-compose.yml` (or
+`Caddyfile`, `docker-compose.prod.yml`, `.env.example`) merged and deployed
+via CD has zero effect on the running containers — the server keeps running
+whatever those files looked like the last time someone copied them over by
+hand.
+
+**Cause:** per ADR 0010, the production VM's `/opt/streaks/infrastructure/`
+isn't a git checkout — it's four files (`docker-compose.yml`,
+`docker-compose.prod.yml`, `Caddyfile`, `.env`) that `deploy.sh` and the
+CD pipeline never touch. CD only pulls new `api`/`caddy` images and runs
+`docker compose up -d`; it doesn't `scp` or otherwise sync these files from
+the repo. Concretely hit during Phase 5 Stage B: `infrastructure/
+docker-compose.yml` gained `OTEL_EXPORTER_OTLP_ENDPOINT`/`OTEL_SERVICE_NAME`
+env vars and an `extra_hosts` entry for the API's Grafana Alloy wiring, and
+none of it took effect until the file was manually `scp`'d to the server
+and `docker compose up -d` was re-run there — with no error or warning
+anywhere in CI/CD to indicate the drift.
+
+**Why left as-is:** these four files are already the minimal, deliberately
+human-reviewed surface for anything that touches the production host
+directly (secrets in `.env`, TLS/proxy config in `Caddyfile`) — auto-syncing
+them from CI/CD would mean unreviewed infra changes land and take effect on
+every merge to `main`, which is a bigger risk than the current "someone has
+to remember to copy the file" gap, especially pre-Stage-D (no verified
+backup/restore yet to fall back on if an auto-synced compose change breaks
+something).
+
+**Revisit when:** this bites again, or once Phase 5 Stage D (backups with a
+verified restore) is done and an automated-but-reviewed sync (e.g. a CD step
+that diffs the four files and fails the deploy with a warning if they've
+drifted, rather than silently applying them) becomes a reasonable tradeoff.
+In the meantime: after merging any `infrastructure/` change other than the
+`api`/`caddy` image tags, manually copy the changed file(s) to
+`/opt/streaks/infrastructure/` on the server and re-run `docker compose
+up -d` there before assuming the change is live.
+
 ## No `Content-Security-Policy` header (Stage 5, decision #10)
 
 **Symptom:** `infrastructure/Caddyfile` sets `Strict-Transport-Security`,

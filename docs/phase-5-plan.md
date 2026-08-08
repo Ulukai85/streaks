@@ -52,29 +52,85 @@ server.
 
 ## Stage B — Grafana Alloy: app telemetry + server-wide log collection
 
-**Status: Not started.**
+**Status: Done (2026-08-07).**
 
-- Add OpenTelemetry .NET SDK to `api/Directory.Packages.props` +
+- Added OpenTelemetry .NET SDK to `api/Directory.Packages.props` +
   `api/Api/Api.csproj` (`OpenTelemetry.Extensions.Hosting`,
-  `OpenTelemetry.Instrumentation.AspNetCore`, `.Instrumentation.Http`, an
-  Npgsql instrumentation package); wire `UseOtlpExporter()` in
-  `api/Api/Program.cs` targeting `localhost:4317`.
-- Install Grafana Alloy on the host (outside `infrastructure/
-  docker-compose.yml` — see ADR 0011's Rationale for why: it needs the
-  Docker socket, host log files, and `journald` across the whole box, not
-  just the Compose network, mirroring the host-level Caddy's placement from
-  Phase 4 Stage 2).
-- Alloy config scope (per ADR 0011): the API's OTLP export; `api`/`caddy`/
-  `postgres` container logs (Docker log-collection component); host-level
-  Caddy's access/error log; `fail2ban`; `ufw`; `unattended-upgrades`;
-  `auth.log`/`sshd` via journald.
-- Add a `log` block to `infrastructure/Caddyfile` (currently absent —
-  compose-internal Caddy only emits default, uncustomized log output today).
+  `OpenTelemetry.Instrumentation.AspNetCore`, `.Instrumentation.Http`,
+  `Npgsql.OpenTelemetry`); wired via `AddAppOpenTelemetry()` in
+  `api/Api/Infrastructure/OpenTelemetryServiceCollectionExtensions.cs`,
+  called from `api/Api/Program.cs`, exporting to Alloy over
+  `host.docker.internal:4317` (env vars `OTEL_EXPORTER_OTLP_ENDPOINT` /
+  `OTEL_SERVICE_NAME` in `infrastructure/docker-compose.yml`).
+- Installed Grafana Alloy on the host (outside `infrastructure/
+  docker-compose.yml`, per ADR 0011). Config lives at
+  `/etc/alloy/config.alloy` on the VM, with a templated reference copy
+  (real instance IDs/URLs stripped — see its header comment) checked in at
+  `infrastructure/alloy/config.alloy`.
+- Alloy config scope, all confirmed live in Grafana Cloud: the API's OTLP
+  traces/metrics/logs; `api`/`caddy`/`postgres` container logs (Docker
+  socket discovery); host-level Caddy's access log; `fail2ban`; `ufw`;
+  `unattended-upgrades`; `sshd` via journald.
+- Added a `log` block to `infrastructure/Caddyfile` (compose-internal
+  Caddy).
 
-**Verify:** traces/metrics/logs from a real request against production
-appear in Grafana Cloud; each server-side log source (fail2ban, ufw,
-unattended-upgrades, auth.log, host Caddy) shows up as its own labeled
-stream, not just the app's own output.
+**Verify:** confirmed 2026-08-07 — a real request against production
+produced a trace for `streaks-api` in Grafana Cloud Tempo within seconds;
+metrics queryable via `{job="streaks-api"}`; all eight log sources listed
+above showed up as their own labeled stream in Loki Explore.
+
+**Gotchas hit during setup** (worth knowing before touching this again):
+
+- **Alloy's config language (River) uses `//` for comments, not `#`.** A
+  `#`-commented config fails to parse with a cascade of "illegal
+  character" errors, one per comment line — easy to misdiagnose as
+  something else since the errors don't obviously say "wrong comment
+  syntax."
+- **Live debugging is opt-in.** The Alloy UI (`:12345`, reach it via an SSH
+  tunnel — it isn't exposed publicly) needs `livedebugging { enabled =
+  true }` in the config before its per-component "Live debugging" tabs
+  work; otherwise every component just errors with "the live debugging
+  service is disabled."
+- **`extra_hosts: host.docker.internal:host-gateway` always resolves to
+  the default `docker0` bridge's IP** (typically `172.17.0.1`), regardless
+  of which Docker network the container actually runs on. If you need a
+  `ufw` rule to allow the container's OTLP traffic through to the host,
+  match on the *container's actual subnet* (check with `docker network
+  inspect <network> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'`),
+  not on `172.17.0.0/16`.
+- **`ufw`'s default-deny `INPUT` policy blocks container→host traffic on
+  ports it doesn't explicitly allow**, including the OTLP port (`4317`)
+  — this isn't Docker's usual `ufw`/`FORWARD`-chain gotcha, since traffic
+  terminating at a host-bound port is `INPUT` traffic, not `FORWARD`.
+  Needs an explicit `ufw allow from <container-subnet> to any port 4317
+  proto tcp`.
+- **Grafana Cloud has two different valid OTLP/Tempo endpoint shapes** —
+  a bare per-service host (`https://tempo-xxx.grafana.net:443`, no path)
+  and the unified OTLP gateway (`https://otlp-gateway-prod-<region>
+  .grafana.net/otlp`, keep the `/otlp`). Guessing at either shape by hand
+  is a fast way to get a confusing "well-formed URL, still 404" — get the
+  exact value from Grafana Cloud Portal → Connections → Add new
+  connection → OpenTelemetry (OTLP) → "manual collector setup" instead.
+- **Host log files need per-file ACLs, not just the `adm` group.**
+  `fail2ban.log`/`ufw.log` are covered by `adm`, but `unattended-upgrades`
+  logs (dir `0750 root:adm`, but historically `0700 root:root` on some
+  boxes) and Caddy's own access log (`0600 caddy:caddy`) weren't. Needed
+  `setfacl -R -m u:alloy:rX <dir>` plus a matching default ACL
+  (`-d`) so future log-rotated files inherit the same access — a plain
+  group-membership grant doesn't reach these.
+- **`local.file_match`/`loki.source.file` remembers read position across
+  restarts.** This is usually helpful, but combined with a log source
+  that's only appended to once or twice a day (`unattended-upgrades`),
+  "no data" in Grafana Explore is more often a **query time-range** issue
+  (default ranges like "last 1 hour" excluding a log source's last write)
+  than an actual pipeline break — check the time range before chasing a
+  phantom bug.
+- **Server config files (`docker-compose.yml`, `Caddyfile`, etc.) aren't
+  synced by CI/CD** — see the new `docs/existing-problems.md` entry on
+  this. A `docker-compose.yml` change (like the OTel env vars/
+  `extra_hosts` this stage needed) has zero effect on the running
+  container until someone manually copies the file to the server and
+  redeploys.
 
 ---
 
