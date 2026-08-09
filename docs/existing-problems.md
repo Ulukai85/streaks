@@ -84,30 +84,3 @@ In the meantime: after merging any `infrastructure/` change other than the
 `api`/`caddy` image tags, manually copy the changed file(s) to
 `/opt/streaks/infrastructure/` on the server and re-run `docker compose
 up -d` there before assuming the change is live.
-
-## No `Content-Security-Policy` header (Stage 5, decision #10)
-
-**Symptom:** `infrastructure/Caddyfile` sets `Strict-Transport-Security`,
-`X-Content-Type-Options`, `Referrer-Policy`, and `X-Frame-Options`, but not
-`Content-Security-Policy`.
-
-**Cause:** the built `web/dist/streaks/browser/index.html` has an inline
-`<style>` block and an inline `onload="this.media='all'"` attribute —
-Angular's automatic critical-CSS inlining, verified by reading the actual
-build output, not assumed. A CSP compatible with that output would need
-`'unsafe-inline'` on `style-src` and `script-src`, which defeats most of
-CSP's point for scripts — allowing inline script execution is exactly what
-CSP exists to block, and matters here given ADR 0008's XSS threat model for
-the in-memory access token.
-
-**Why left as-is:** doing this properly means disabling Angular's
-critical-CSS inlining first, so the build stops emitting inline
-`<style>`/`onload`, and only then shipping a CSP without `'unsafe-inline'`.
-That's a frontend build-config change (`web/angular.json`), not something
-to bundle quietly into a Caddyfile-only pass.
-
-**Revisit when:** someone's ready to set
-`optimization.styles.inlineCritical: false` in `web/angular.json`, confirm
-the app still renders correctly without the inlined critical CSS (slightly
-slower first paint is the expected tradeoff), and then add a real
-`Content-Security-Policy` header to `infrastructure/Caddyfile`.

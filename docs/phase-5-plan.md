@@ -277,19 +277,43 @@ go stale.
 
 ## Stage E — CSP header (closes an existing tracked gap)
 
-**Status: Not started.**
+**Status: Done (2026-08-09).**
 
-- Set `optimization.styles.inlineCritical: false` in `web/angular.json` to
-  stop Angular inlining critical CSS into `index.html` (the thing currently
-  blocking a CSP), per `docs/existing-problems.md`'s existing entry on this.
-- Add a `Content-Security-Policy` header to `infrastructure/Caddyfile`
+- Set `optimization.styles.inlineCritical: false` under the `production`
+  build configuration in `web/angular.json`, so Angular stops inlining
+  critical CSS (and the `onload` attribute that came with it) into
+  `index.html` — the thing that previously blocked a CSP.
+- Added a `Content-Security-Policy` header to `infrastructure/Caddyfile`
   alongside the existing HSTS/`X-Content-Type-Options`/`Referrer-Policy`/
-  `X-Frame-Options` headers.
-- Remove the closed item from `docs/existing-problems.md` once done.
+  `X-Frame-Options` headers:
+  `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data:; connect-src 'self'
+  https://o4509770681024512.ingest.de.sentry.io; base-uri 'self';
+  form-action 'self'; frame-ancestors 'none';`
+- `script-src` has no `'unsafe-inline'` — the CSP-relevant protection
+  against inline script execution (ADR 0008's XSS threat model) is intact.
+  `style-src` does need `'unsafe-inline'`: independent of critical-CSS
+  inlining, Angular's view encapsulation injects each component's scoped
+  styles as runtime `<style>` tags, which a strict `style-src 'self'` would
+  also block. Angular's docs offer a real fix (a per-request nonce via
+  `CSP_NONCE`/`ngCspNonce`) but that needs nonce generation at the edge,
+  which Caddy doesn't do natively — would mean a new dependency and an ADR.
+  Decided with the user to take Angular's documented fallback
+  (`'unsafe-inline'` on `style-src` only) instead, as a deliberately smaller
+  scope for this stage.
+- `connect-src` allows Sentry's `streaks-web` ingest host
+  (`https://o4509770681024512.ingest.de.sentry.io`, from
+  `web/src/environments/environment.ts`) so Stage C's web error tracking
+  keeps working under the new policy. No other third-party hosts needed —
+  Tailwind/spartan-ng are both bundled at build time, no external fonts/CDNs.
+- Removed the now-closed "No `Content-Security-Policy` header" entry from
+  `docs/existing-problems.md`.
 
 **Verify:** browser dev tools show no CSP violations on a full app
 walkthrough (dashboard, challenges, login); response headers show the new
-`Content-Security-Policy` value.
+`Content-Security-Policy` value; confirm the Sentry web integration still
+reaches its ingest host under the new `connect-src` (didn't silently start
+being blocked).
 
 ---
 
