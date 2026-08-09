@@ -1,0 +1,16 @@
+# streaks-backup.service — REFERENCE COPY ONLY.
+#
+# Live copy: /etc/systemd/system/streaks-backup.service on the production
+# VM. Not synced by CI/CD — see infrastructure/backup/backup.sh for the
+# deploy/update steps (same pattern, install with `sudo install -m 644`
+# into /etc/systemd/system/ instead, then `sudo systemctl daemon-reload`).
+
+[Unit]
+Description=Streaks Postgres backup (pg_dump -> restic -> B2)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/streaks/backup/.env
+ExecStart=/opt/streaks/backup/backup.sh

@@ -24,6 +24,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+      Sentry__Dsn: ${SENTRY_DSN}
       SEED_USER_NAME: ${SEED_USER_NAME}
       SEED_USER_PASSWORD: ${SEED_USER_PASSWORD}
       # Grafana Alloy runs on the host, not in Compose (ADR 0011) - api's own "localhost" is its

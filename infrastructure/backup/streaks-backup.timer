@@ -1,0 +1,16 @@
+# streaks-backup.timer — REFERENCE COPY ONLY.
+#
+# Live copy: /etc/systemd/system/streaks-backup.timer on the production VM.
+# Same deploy steps as streaks-backup.service. Enable with:
+#
+#   sudo systemctl enable --now streaks-backup.timer
+
+[Unit]
+Description=Daily timer for streaks-backup.service
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

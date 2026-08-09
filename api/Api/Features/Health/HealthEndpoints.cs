@@ -9,7 +9,11 @@ public static class HealthEndpoints
     {
         var group = app.MapGroup("/api/health");
 
-        group.MapGet("/", async Task<Results<Ok<HealthResponse>, ProblemHttpResult>> (AppDbContext db, CancellationToken ct) =>
+        // HEAD alongside GET: some uptime-checker free tiers (e.g. Better
+        // Stack) only offer HEAD for their basic monitor, and MapGet alone
+        // doesn't implicitly answer HEAD requests (confirmed empirically —
+        // it 405s without this).
+        group.MapMethods("/", [HttpMethods.Get, HttpMethods.Head], async Task<Results<Ok<HealthResponse>, ProblemHttpResult>> (AppDbContext db, CancellationToken ct) =>
         {
             var connected = await db.Database.CanConnectAsync(ct);
             return connected

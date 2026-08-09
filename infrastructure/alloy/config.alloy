@@ -1,26 +1,33 @@
-# Grafana Alloy config — REFERENCE COPY ONLY.
-#
-# The live copy this process actually runs from is /etc/alloy/config.alloy
-# on the production VM. It is installed and managed by hand (Alloy runs on
-# the host, not in infrastructure/docker-compose.yml — see ADR 0011's
-# Rationale), and is NOT synced by CI/CD, the same way host-level Caddy's
-# config isn't tracked in this repo at all. If you edit this file, copy it
-# to the VM yourself and restart the service:
-#
-#   scp infrastructure/alloy/config.alloy deploy@<host>:/tmp/config.alloy
-#   ssh deploy@<host> 'sudo mv /tmp/config.alloy /etc/alloy/config.alloy && sudo systemctl restart alloy'
-#
-# The first three blocks (remotecfg, prometheus.remote_write, loki.write)
-# mirror Grafana Cloud's generated install script, with account-specific
-# values (instance IDs, endpoint hostnames) templated out — this file is
-# public, and while an instance ID isn't a secret on its own (the real
-# secret, GCLOUD_RW_API_KEY, only ever exists as an env var, never here),
-# there's no reason to hand an attacker a valid username to target. The
-# real filled-in values live only in /etc/alloy/config.alloy on the VM,
-# which is never committed. GCLOUD_RW_API_KEY is already wired into the
-# alloy.service environment by the install script. Everything below the
-# "--- streaks app wiring ---" marker was added by hand for Stage B
-# (docs/phase-5-plan.md); its Tempo block is templated the same way.
+// Grafana Alloy config — REFERENCE COPY ONLY.
+//
+// The live copy this process actually runs from is /etc/alloy/config.alloy
+// on the production VM. It is installed and managed by hand (Alloy runs on
+// the host, not in infrastructure/docker-compose.yml — see ADR 0011's
+// Rationale), and is NOT synced by CI/CD, the same way host-level Caddy's
+// config isn't tracked in this repo at all. If you edit this file, copy it
+// to the VM yourself and restart the service:
+//
+//   scp infrastructure/alloy/config.alloy deploy@<host>:/tmp/config.alloy
+//   ssh deploy@<host> 'sudo mv /tmp/config.alloy /etc/alloy/config.alloy && sudo systemctl restart alloy'
+//
+// The first three blocks (remotecfg, prometheus.remote_write, loki.write)
+// mirror Grafana Cloud's generated install script, with account-specific
+// values (instance IDs, endpoint hostnames) templated out — this file is
+// public, and while an instance ID isn't a secret on its own (the real
+// secret, GCLOUD_RW_API_KEY, only ever exists as an env var, never here),
+// there's no reason to hand an attacker a valid username to target. The
+// real filled-in values live only in /etc/alloy/config.alloy on the VM,
+// which is never committed. GCLOUD_RW_API_KEY is already wired into the
+// alloy.service environment by the install script. Everything below the
+// "--- streaks app wiring ---" marker was added by hand for Stage B
+// (docs/phase-5-plan.md); its Tempo block is templated the same way.
+
+// Disabled by default (it can expose sensitive telemetry data), enabled here
+// because the Alloy UI (:12345) is only reachable via an SSH tunnel to the
+// VM, not exposed publicly — see the Stage B walkthrough for how to use it.
+livedebugging {
+  enabled = true
+}
 
 remotecfg {
   url            = "https://fleet-management-prod-011.grafana.net"
@@ -56,14 +63,14 @@ loki.write "grafana_cloud_loki" {
   }
 }
 
-# --- streaks app wiring (Stage B) ---------------------------------------
+// --- streaks app wiring (Stage B) ---------------------------------------
 
-# 1. OTLP receiver — the containerized API's traces/metrics/logs, reached
-#    via http://host.docker.internal:4317 (see OTEL_EXPORTER_OTLP_ENDPOINT
-#    in infrastructure/docker-compose.yml). Metrics/logs are converted to
-#    Prometheus/Loki format and pushed through the endpoints already
-#    defined above; traces go to Tempo directly over OTLP, since Grafana
-#    Cloud doesn't have a "prometheus.remote_write"-style bridge for spans.
+// 1. OTLP receiver — the containerized API's traces/metrics/logs, reached
+//    via http://host.docker.internal:4317 (see OTEL_EXPORTER_OTLP_ENDPOINT
+//    in infrastructure/docker-compose.yml). Metrics/logs are converted to
+//    Prometheus/Loki format and pushed through the endpoints already
+//    defined above; traces go to Tempo directly over OTLP, since Grafana
+//    Cloud doesn't have a "prometheus.remote_write"-style bridge for spans.
 
 otelcol.receiver.otlp "api" {
   grpc {
@@ -85,20 +92,25 @@ otelcol.exporter.loki "default" {
   forward_to = [loki.write.grafana_cloud_loki.receiver]
 }
 
+// This is Grafana Cloud's unified OTLP gateway (from Connections -> Add new
+// connection -> OpenTelemetry (OTLP) -> "manual collector setup"), not a
+// Tempo-specific host. Keep the "/otlp" path — it's part of the real
+// endpoint, unlike an earlier wrong guess at a bare Tempo hostname that
+// 404'd. otelcol.exporter.otlphttp appends "/v1/traces" after it.
 otelcol.exporter.otlphttp "tempo" {
   client {
-    endpoint = sys.env("GCLOUD_TEMPO_URL")
+    endpoint = sys.env("GCLOUD_OTLP_GATEWAY_URL")
 
     auth = otelcol.auth.basic.tempo.handler
   }
 }
 
 otelcol.auth.basic "tempo" {
-  username = sys.env("GCLOUD_TEMPO_INSTANCE_ID")
+  username = sys.env("GCLOUD_OTLP_GATEWAY_INSTANCE_ID")
   password = sys.env("GCLOUD_RW_API_KEY")
 }
 
-# 2. Docker container logs — api / caddy / postgres stdout+stderr.
+// 2. Docker container logs — api / caddy / postgres stdout+stderr.
 
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
@@ -122,8 +134,8 @@ loki.source.docker "containers" {
   forward_to     = [loki.write.grafana_cloud_loki.receiver]
 }
 
-# 3. Host log files — host-level Caddy, fail2ban, ufw, unattended-upgrades.
-#    Paths are Ubuntu defaults; confirm on the box before relying on them.
+// 3. Host log files — host-level Caddy, fail2ban, ufw, unattended-upgrades.
+//    Paths are Ubuntu defaults; confirm on the box before relying on them.
 
 local.file_match "host_logs" {
   path_targets = [
@@ -139,8 +151,8 @@ loki.source.file "host_logs" {
   forward_to = [loki.write.grafana_cloud_loki.receiver]
 }
 
-# 4. journald — sshd / auth log, complementing fail2ban's ban log with the
-#    underlying attempt log (per ADR 0011).
+// 4. journald — sshd / auth log, complementing fail2ban's ban log with the
+//    underlying attempt log (per ADR 0011).
 
 loki.source.journal "auth" {
   matches    = "_SYSTEMD_UNIT=ssh.service"
