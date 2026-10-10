@@ -25,6 +25,6 @@ cd /opt/streaks/infrastructure
 : "${POSTGRES_DB:?POSTGRES_DB not set}"
 
 docker compose exec -T postgres pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" \
-  | restic backup --stdin --stdin-filename streaks.dump
+  | restic backup -v --stdin --stdin-filename streaks.dump
 
-restic forget --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6
+restic forget -v --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 6

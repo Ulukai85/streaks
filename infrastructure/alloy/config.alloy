@@ -159,3 +159,13 @@ loki.source.journal "auth" {
   labels     = {job = "sshd"}
   forward_to = [loki.write.grafana_cloud_loki.receiver]
 }
+
+// 5. journald — streaks-backup.service (Stage D). A oneshot unit with no
+//    log file of its own, so journald is the only place its pg_dump/restic
+//    output (and success/failure) exists outside SSHing into the box.
+
+loki.source.journal "backup" {
+  matches    = "_SYSTEMD_UNIT=streaks-backup.service"
+  labels     = {job = "streaks-backup"}
+  forward_to = [loki.write.grafana_cloud_loki.receiver]
+}
