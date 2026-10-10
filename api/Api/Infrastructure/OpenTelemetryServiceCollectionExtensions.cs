@@ -1,3 +1,4 @@
+using Npgsql;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -14,10 +15,16 @@ public static class OpenTelemetryServiceCollectionExtensions
         services.AddOpenTelemetry()
             .WithTracing(tracing => tracing
                 .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation())
+                .AddHttpClientInstrumentation()
+                .AddNpgsql())
             .WithMetrics(metrics => metrics
                 .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation())
+                .AddHttpClientInstrumentation()
+                // Npgsql.OpenTelemetry only exposes an AddNpgsql() extension for tracing;
+                // its metrics are emitted via a plain System.Diagnostics.Metrics Meter named
+                // "Npgsql" (confirmed by Npgsql's own dotnet-counters docs), so metrics are
+                // picked up by name instead.
+                .AddMeter("Npgsql"))
             .WithLogging()
             .UseOtlpExporter();
 

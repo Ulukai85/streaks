@@ -35,6 +35,11 @@ builder.WebHost.AddSentry();
 
 var app = builder.Build();
 
+if (app.Environment.IsProduction() && string.IsNullOrEmpty(app.Configuration["Sentry:Dsn"]))
+{
+    app.Logger.LogWarning("Sentry:Dsn is not configured in Production — errors will not be reported to Sentry.");
+}
+
 await app.MigrateAndSeedAsync();
 
 // Pipeline phase
