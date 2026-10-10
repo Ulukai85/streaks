@@ -31,7 +31,7 @@
   },
   "devDependencies": {
     "@angular/build": "^22.0.8",
-    "@angular/cli": "^22.0.8",
+    "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.0.0",
     "@eslint/js": "^10.0.1",
     "@spartan-ng/cli": "^1.1.1",
